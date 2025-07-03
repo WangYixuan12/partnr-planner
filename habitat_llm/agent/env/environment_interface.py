@@ -165,13 +165,15 @@ class EnvironmentInterface:
         if self.partial_obs:
             self.world_graph = {
                 self.robot_agent_uid: DynamicWorldGraph(),
-                self.human_agent_uid: DynamicWorldGraph(),
             }
+            if self.human_agent_uid >= 0:
+                self.world_graph[self.human_agent_uid] = DynamicWorldGraph()
         else:
             self.world_graph = {
                 self.robot_agent_uid: WorldGraph(),
-                self.human_agent_uid: WorldGraph(),
             }
+            if self.human_agent_uid >= 0:
+                self.world_graph[self.human_agent_uid] = WorldGraph()
 
         # set agent-asymmetry flag if True
         if self.conf.agent_asymmetry:
@@ -198,9 +200,10 @@ class EnvironmentInterface:
             self.world_graph[self.robot_agent_uid].world_model_type = "non_privileged"
             # initialize the human agent's world-graph from sim with partial observability
             subgraph = self.perception.initialize(partial_obs=self.partial_obs)
-            self.world_graph[self.conf.human_agent_uid].update(
-                subgraph, self.partial_obs, "gt", add_only=True
-            )
+            if self.human_agent_uid >= 0:
+                self.world_graph[self.conf.human_agent_uid].update(
+                    subgraph, self.partial_obs, "gt", add_only=True
+                )
 
             # initialize robot agent's world-graph from CG
             cg_json = None
@@ -482,21 +485,28 @@ class EnvironmentInterface:
         # Update both graphs using both human and robot observations
         else:
             # Get robots subgraph using both human and robot observations
-            most_recent_robot_subgraph = self.perception.get_recent_subgraph(
-                [str(self.robot_agent_uid), str(self.human_agent_uid)], obs
-            )
+            if self.human_agent_uid >= 0:
+                most_recent_robot_subgraph = self.perception.get_recent_subgraph(
+                    [str(self.robot_agent_uid), str(self.human_agent_uid)], obs
+                )
+            else:
+                most_recent_robot_subgraph = self.perception.get_recent_subgraph(
+                    [str(self.robot_agent_uid)], obs
+                )
 
             # Get human subgraph using only human observations
             observation_sources = []
-            if self.conf.agent_asymmetry:
+            if self.conf.agent_asymmetry and self.human_agent_uid >= 0:
                 # under asymmetry condition human's world-graph only uses human's own observations
                 observation_sources = [str(self.human_agent_uid)]
-            else:
+            elif self.human_agent_uid >= 0:
                 # under symmetry condition the human's world-graph uses both human's and Spot's observations
                 observation_sources = [
                     str(self.robot_agent_uid),
                     str(self.human_agent_uid),
                 ]
+            else:
+                observation_sources = [str(self.robot_agent_uid)]
             most_recent_human_subgraph = self.perception.get_recent_subgraph(
                 observation_sources,
                 obs,
@@ -508,9 +518,10 @@ class EnvironmentInterface:
             )
 
             # Update human graph
-            self.world_graph[self.human_agent_uid].update(
-                most_recent_human_subgraph, self.partial_obs, self.wm_update_mode
-            )
+            if self.human_agent_uid >= 0:
+                self.world_graph[self.human_agent_uid].update(
+                    most_recent_human_subgraph, self.partial_obs, self.wm_update_mode
+                )
 
         return
 
@@ -548,21 +559,26 @@ class EnvironmentInterface:
         else:
             raise ValueError("Frame description is None")
         # update the world-graph for the human agent
-        if self.conf.agent_asymmetry:
+        if self.conf.agent_asymmetry and self.human_agent_uid >= 0:
             most_recent_human_subgraph = self.perception.get_recent_subgraph(
                 self.sim, [str(self.human_agent_uid)], obs
             )
-        else:
+        elif self.human_agent_uid >= 0:
             most_recent_human_subgraph = self.perception.get_recent_subgraph(
                 self.sim,
                 [str(self.robot_agent_uid), str(self.human_agent_uid)],
                 obs,
             )
-        self.world_graph[self.conf.human_agent_uid].update(
-            most_recent_human_subgraph,
-            self.partial_obs,
-            "gt",  # human's WG is always updated in privileged mode
-        )
+        else:
+            most_recent_human_subgraph = self.perception.get_recent_subgraph(
+                self.sim, [str(self.robot_agent_uid)], obs
+            )
+        if self.human_agent_uid >= 0:
+            self.world_graph[self.conf.human_agent_uid].update(
+                most_recent_human_subgraph,
+                self.partial_obs,
+                "gt",  # human's WG is always updated in privileged mode
+            )
 
     def get_frame_description(self, obs):
         """

@@ -55,10 +55,6 @@ class DebugVideoUtil:
         images = []
         for obs_name, obs_value in batch.items():
             if "third_rgb" in obs_name:
-                if self.num_agents == 1:
-                    if "0" in obs_name or "main_agent" in obs_name:
-                        images.append(obs_value)
-                else:
                     images.append(obs_value)
 
         # Extract dimensions of the first image

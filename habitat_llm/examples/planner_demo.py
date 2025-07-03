@@ -274,6 +274,7 @@ def run_planner(config, dataset: CollaborationDatasetV0 = None, conn=None):
             print("Error initializing the environment")
             if config.evaluation.log_data:
                 save_exception_message(config, env_interface)
+            raise Exception("Error initializing the environment")
     else:
         env_interface = None
 

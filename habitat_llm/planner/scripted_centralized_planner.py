@@ -1201,7 +1201,7 @@ class ScriptedCentralizedPlanner(Planner):
             if next_skill_agents[agent_id] and not self.is_waiting[agent_id]:
                 self.plan_indx[agent_id] += 1
 
-        is_done = [False, False]
+        is_done = [False] * len(next_skill_agents)
         for agent_id in next_skill_agents:
             curr_step_skill = self.plan_indx[agent_id]
             if curr_step_skill >= len(self.actions_per_agent[agent_id]):
@@ -1220,7 +1220,7 @@ class ScriptedCentralizedPlanner(Planner):
             for agent_id in self.actions_per_agent:
                 self.is_waiting[agent_id] = False
 
-            return self.actions_parser({0: True, 1: True})
+            return self.actions_parser({agent_id: True for agent_id in self.actions_per_agent})
 
         high_level_actions = {}
         for agent_id in self.actions_per_agent:

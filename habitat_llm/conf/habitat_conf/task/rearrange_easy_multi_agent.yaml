@@ -3,11 +3,8 @@
 defaults:
   - /habitat/task: task_config_base
   - /habitat/task/actions@actions.agent_0_arm_action: arm_action
-  # - /habitat/task/actions@actions.agent_1_arm_action: arm_action
   - /habitat/task/actions@actions.agent_0_base_velocity: base_velocity
-  - /habitat/task/actions@actions.agent_1_base_velocity: base_velocity
   # - /habitat/task/actions@actions.agent_0_rearrange_stop: rearrange_stop
-  # - /habitat/task/actions@actions.agent_1_rearrange_stop: rearrange_stop
   - /habitat/task/measurements:
     # - object_to_goal_distance
     - articulated_agent_force

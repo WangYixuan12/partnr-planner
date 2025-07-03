@@ -608,6 +608,7 @@ class EvaluationRunner:
                 obs, reward, done, info = self.env_interface.step(low_level_actions)
                 # Refresh observations
                 observations = self.env_interface.parse_observations(obs)
+                # observations['agent_0_head_rgb']
                 if self.evaluation_runner_config.save_video:
                     # Store third person frames for generating video
                     self.dvu._store_for_video(

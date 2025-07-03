@@ -3,3 +3,13 @@
 defaults:
   - /examples/centralized_full_obs
   - override /planner@evaluation.planner: dag_centralized_planner
+
+habitat:
+  simulator:
+    step_physics: true
+    agents:
+      agent_0:
+        sim_sensors:
+          head_rgb_sensor:
+            height: 1024
+            width: 1024

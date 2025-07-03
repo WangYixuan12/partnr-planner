@@ -110,8 +110,7 @@ class WorldGraph(Graph):
         for node in self.graph:
             if isinstance(node, Human):
                 return node
-
-        raise ValueError("World graph does not contain a node of type Human")
+        return None
 
     def get_agents(self):
         """
@@ -193,7 +192,7 @@ class WorldGraph(Graph):
         for obj in all_objs:
             if self.is_object_with_agent(obj, agent_type="robot"):
                 objs_info += obj.name + ": " + spot_node.name + "\n"
-            elif self.is_object_with_agent(obj, agent_type="human"):
+            elif self.is_object_with_agent(obj, agent_type="human") and human_node is not None:
                 objs_info += obj.name + ": " + human_node.name + "\n"
             else:
                 furniture = self.find_furniture_for_object(obj)
