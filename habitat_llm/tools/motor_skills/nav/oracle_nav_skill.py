@@ -539,9 +539,10 @@ class OracleNavSkill(SkillPolicy):
                 # check if there is a collision caused by rotation
                 # if it does, we should block the rotation, and
                 # only move backward
-                need_move_backward = self.rotation_collision_check(
-                    cur_nav_targ,
-                )
+                # need_move_backward = self.rotation_collision_check(
+                #     cur_nav_targ,
+                # )
+                need_move_backward = False
 
             if need_move_backward and self.enable_backing_up:
                 # Backward direction

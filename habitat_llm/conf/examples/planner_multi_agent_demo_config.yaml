@@ -2,7 +2,8 @@
 
 defaults:
   - /training@             : base_train
-  - /habitat_conf          : oracle_spot_kinematic_multi_agent
+  # - /habitat_conf          : oracle_spot_kinematic_multi_agent
+  - /habitat_conf          : oracle_vega_kinematic_multi_agent
   - /habitat_conf/task     : rearrange_easy_multi_agent
   - /evaluation: centralized_evaluation_runner_multi_agent
   - /world_model@world_model: gt_graph

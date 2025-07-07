@@ -1,0 +1,133 @@
+# @package _global_
+
+defaults:
+  - /habitat: habitat_config_base
+  - /habitat_conf/dataset: collaboration_hssd
+
+  #- /habitat/task/rearrange: rearrange_easy
+  - /habitat/task/lab_sensors:
+    - humanoid_detector_sensor
+  - _self_
+
+habitat:
+  gym:
+    # auto_name: RearrangeEasy
+    obs_keys:
+      - third_rgb
+      - head_depth
+      - head_rgb
+      - relative_resting_position
+      - joint
+      - ee_pos
+      - is_holding
+      - dynamic_obj_goal_sensor
+      - dynamic_goal_to_agent_gps_compass
+      # dynamic_obj_start_sensor is mapped into dynamic_obj_start_sensor automatically
+      # due to sensor mapping
+      - dynamic_obj_start_sensor
+      - goal_to_agent_gps_compass
+      - humanoid_detector_sensor
+
+  task:
+    lab_sensors:
+      # Defien the human detector
+      humanoid_detector_sensor:
+        # If the human detector function is image or binary flag
+        return_image: False
+        is_return_image_bbox: False
+  environment:
+    max_episode_steps: 20000
+  simulator:
+    type: CollaborationSim-v0
+    additional_object_paths:
+      - "data/objects/ycb/configs/"
+      - "data/objects_ovmm/train_val/ai2thorhab/configs/objects"
+      - "data/objects_ovmm/train_val/amazon_berkeley/configs"
+      - "data/objects_ovmm/train_val/google_scanned/configs"
+      - "data/objects_ovmm/train_val/hssd/configs/objects"
+    concur_render: False
+    auto_sleep: True
+    agents:
+      agent_0:
+        radius: 0.3
+        articulated_agent_urdf: ./data/robots/vega-urdf/vega_no_effector.urdf
+        articulated_agent_type: VegaRobot
+        joint_start_noise: 0.0
+        sim_sensors:
+          head_rgb_sensor:
+            type: HabitatSimRGBSensor
+            height: 1024
+            width: 1024
+            position:
+            - 0.0
+            - 1.25
+            - 0.0
+            orientation:
+            - 0.0
+            - 0.0
+            - 0.0
+            hfov: 90
+            sensor_subtype: PINHOLE
+            noise_model: None
+            noise_model_kwargs: {}
+            uuid: head_rgb
+          head_depth_sensor:
+            type: HabitatSimDepthSensor
+            height: 256
+            width: 256
+            position:
+            - 0.0
+            - 1.25
+            - 0.0
+            orientation:
+            - 0.0
+            - 0.0
+            - 0.0
+            hfov: 90
+            sensor_subtype: PINHOLE
+            noise_model: None
+            noise_model_kwargs: {}
+            min_depth: 0.0
+            max_depth: 10.0
+            normalize_depth: true
+            uuid: head_depth
+          third_rgb_sensor:
+            type: HabitatSimRGBSensor
+            height: 512
+            width: 512
+            position:
+            - 0.0
+            - 1.25
+            - 0.0
+            orientation:
+            - 0.0
+            - 0.0
+            - 0.0
+            hfov: 80
+            sensor_subtype: PINHOLE
+            noise_model: None
+            noise_model_kwargs: {}
+            uuid: third_rgb
+          fixed_rgb_sensor:
+            type: HabitatSimRGBSensor
+            height: 512
+            width: 512
+            position:
+            - 0.0
+            - 1.25
+            - 0.0
+            orientation:
+            - 0.0
+            - 0.0
+            - 0.0
+            hfov: 80
+            sensor_subtype: PINHOLE
+            noise_model: None
+            noise_model_kwargs: {}
+            uuid: fixed_rgb
+    kinematic_mode: True
+    step_physics: False
+    habitat_sim_v0:
+      allow_sliding: True
+      enable_physics: True
+      enable_hbao: True

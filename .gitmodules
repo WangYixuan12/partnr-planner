@@ -1,6 +1,6 @@
 [submodule "third_party/habitat-lab"]
 	path = third_party/habitat-lab
-	url = https://github.com/facebookresearch/habitat-lab
+	url = git@github.com:WangYixuan12/habitat-lab.git
 [submodule "third_party/semantic_exploration"]
 	path = third_party/semantic_exploration
 	url = https://github.com/jimmytyyang/semantic_exploration
