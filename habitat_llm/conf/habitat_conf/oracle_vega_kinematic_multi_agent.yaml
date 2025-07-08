@@ -14,6 +14,7 @@ habitat:
     # auto_name: RearrangeEasy
     obs_keys:
       - third_rgb
+      - gui_rgb
       - head_depth
       - head_rgb
       - relative_resting_position
@@ -125,6 +126,23 @@ habitat:
             noise_model: None
             noise_model_kwargs: {}
             uuid: fixed_rgb
+          gui_rgb_sensor:
+            type: HabitatSimRGBSensor
+            height: 512
+            width: 512
+            position:
+            - 0.0
+            - 1.25
+            - 0.0
+            orientation:
+            - 0.0
+            - 0.0
+            - 0.0
+            hfov: 80
+            sensor_subtype: PINHOLE
+            noise_model: None
+            noise_model_kwargs: {}
+            uuid: gui_rgb
     kinematic_mode: True
     step_physics: False
     habitat_sim_v0:
