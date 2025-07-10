@@ -94,8 +94,8 @@ habitat:
             uuid: head_depth
           third_rgb_sensor:
             type: HabitatSimRGBSensor
-            height: 512
-            width: 512
+            height: 1024
+            width: 1024
             position:
             - 0.0
             - 1.25
@@ -111,8 +111,8 @@ habitat:
             uuid: third_rgb
           fixed_rgb_sensor:
             type: HabitatSimRGBSensor
-            height: 512
-            width: 512
+            height: 1024
+            width: 1024
             position:
             - 0.0
             - 1.25
@@ -128,8 +128,8 @@ habitat:
             uuid: fixed_rgb
           gui_rgb_sensor:
             type: HabitatSimRGBSensor
-            height: 512
-            width: 512
+            height: 1024
+            width: 1024
             position:
             - 0.0
             - 1.25

@@ -136,6 +136,7 @@ def run_eval(config):
     # Setup config
     config = setup_config(config, seed)
     dataset = CollaborationDatasetV0(config.habitat.dataset)
+    dataset.episodes = dataset.episodes[17:18]
 
     write_config(config)
     if config.get("resume", False):
@@ -332,9 +333,8 @@ def run_planner(config, dataset: CollaborationDatasetV0 = None, conn=None):
         }
 
         num_episodes = len(env_interface.env.episodes)
-        episodes_ids = [78]
         for run_id in range(config.num_runs_per_episode):
-            for episode_id in episodes_ids:
+            for _ in range(num_episodes):
                 # Get episode id
                 episode_id = env_interface.env.env.env._env.current_episode.episode_id
 
