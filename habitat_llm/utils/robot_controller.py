@@ -133,12 +133,6 @@ class RobotController:
         if "d" in self._keys_pressed:
             actions[8] = -10.0
 
-        # Move head up/down (I/K) - pitch control
-        if "i" in self._keys_pressed:
-            self._head_alpha += self._head_rotation_speed
-        if "k" in self._keys_pressed:
-            self._head_alpha -= self._head_rotation_speed
-
         # Rotate head left/right (J/L) - yaw control
         if "j" in self._keys_pressed:
             self._head_beta -= self._head_rotation_speed
@@ -151,22 +145,62 @@ class RobotController:
         if "6" in self._keys_pressed:
             self._head_gamma += self._head_rotation_speed
 
-        # Clamp head rotation angles to reasonable limits
-        self._head_alpha = np.clip(self._head_alpha, -1.0, 1.0)  # ±57 degrees
-        self._head_beta = np.clip(self._head_beta, -1.5, 1.5)  # ±86 degrees
-        self._head_gamma = np.clip(self._head_gamma, -0.5, 0.5)  # ±29 degrees
+        # Move head up/down (5/8) - pitch control
+        if "8" in self._keys_pressed:
+            self._head_alpha += self._head_rotation_speed
+        if "5" in self._keys_pressed:
+            self._head_alpha -= self._head_rotation_speed
 
         # Apply head movements using IK solver
-        if any(key in self._keys_pressed for key in ["i", "k", "j", "l", "4", "6"]):
+        if any(
+            key in self._keys_pressed
+            for key in ["i", "k", "j", "l", "4", "6", "8", "5"]
+        ):
             # Access the articulated agent to get current joint positions
             articulated_agent = self._env_interface.sim.get_agent_data(
                 self._agent_idx
             ).articulated_agent
-            current_qpos = articulated_agent.sim_obj.joint_positions
+            current_qpos = np.array(articulated_agent.sim_obj.joint_positions)
+            joint_names = [
+                "B_wheel_j1",
+                "B_wheel_j2",
+                "R_wheel_j1",
+                "R_wheel_j2",
+                "L_wheel_j1",
+                "L_wheel_j2",
+                "torso_j1",
+                "torso_j2",
+                "torso_j3",
+                "L_arm_j1",
+                "L_arm_j2",
+                "L_arm_j3",
+                "L_arm_j4",
+                "L_arm_j5",
+                "L_arm_j6",
+                "L_arm_j7",
+                "R_arm_j1",
+                "R_arm_j2",
+                "R_arm_j3",
+                "R_arm_j4",
+                "R_arm_j5",
+                "R_arm_j6",
+                "R_arm_j7",
+                "head_j1",
+                "head_j2",
+                "head_j3",
+            ]
+            current_qpos = self._kin_helper.convert_to_sapien_joint_order(
+                current_qpos, joint_names
+            )
 
-            # Create target head pose based on current alpha, beta, gamma
-            # Following the pattern from sapien_vega_example.py
-            target_head_pose = np.eye(4)
+            curr_head_pose = self._kin_helper.compute_fk_from_link_idx(
+                current_qpos, [26]
+            )[0]
+            target_head_pose = curr_head_pose.copy()
+            if "i" in self._keys_pressed:
+                target_head_pose[:3, 3] += 0.01 * np.array([0, 0, 1])
+            if "k" in self._keys_pressed:
+                target_head_pose[:3, 3] -= 0.01 * np.array([0, 0, 1])
 
             # Apply rotations based on alpha (pitch), beta (yaw), gamma (roll)
             # Alpha controls up/down (pitch around X axis)
@@ -194,31 +228,36 @@ class RobotController:
             # Define active joint mask for head control
             # Based on sapien example, we activate specific joints for head control
             # Adjust these indices based on the actual robot configuration
-            active_qmask = np.zeros(38, dtype=bool)
+            active_qmask = np.zeros(26, dtype=bool)
             active_qmask[3] = True  # torso joint
             active_qmask[7:10] = True  # head joints
             active_qmask[12] = True  # additional head joint
             active_qmask[15] = True  # additional head joint
 
             # Compute IK for head pose (eef_idx=26 for head end effector)
-            try:
-                new_qpos = self._kin_helper.compute_ik_from_mat(
-                    current_qpos,
-                    target_head_pose,
-                    eef_idx=26,
-                    active_qmask=active_qmask,
-                )
-                actions = new_qpos
-            except Exception as e:
-                # If IK fails, try with a simpler approach or fallback
-                print(f"IK computation failed: {e}")
-                # Fallback to direct joint control for head movements
-                actions[9] = self._head_beta * 10.0  # joint_head_pan (left/right)
-                actions[10] = self._head_alpha * 10.0  # joint_head_tilt (up/down)
+            new_qpos = self._kin_helper.compute_ik_from_mat(
+                current_qpos,
+                target_head_pose,
+                eef_idx=26,
+                active_qmask=active_qmask,
+            )
+            new_qpos = self._kin_helper.convert_from_sapien_joint_order(
+                new_qpos, joint_names
+            )
+            self._env_interface.sim.get_agent_data(
+                self._agent_idx
+            ).articulated_agent.sim_obj.joint_positions = new_qpos
 
         # Update agent state in simulator
+        curr_qpos = self._env_interface.sim.get_agent_data(
+            self._agent_idx
+        ).articulated_agent.sim_obj.joint_positions
+        self._env_interface.env.step(actions.astype(np.float32))
+        self._env_interface.sim.get_agent_data(
+            self._agent_idx
+        ).articulated_agent.sim_obj.joint_positions = curr_qpos
         obs, reward, done, info = self._env_interface.env.step(
-            actions.astype(np.float32)
+            np.zeros(38).astype(np.float32)
         )
         return obs
 

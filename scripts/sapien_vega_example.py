@@ -43,7 +43,7 @@ def demo(fix_root_link, balance_passive_force):
         robot.get_links()[26].get_entity_pose().to_transformation_matrix().copy()
     )
     target_head_pose = init_head_pose.copy()
-    target_head_pose[2, 3] += 0.2
+    target_head_pose[2, 3] += 0.4
     alpha = 0.2
     beta = 0.4
 
