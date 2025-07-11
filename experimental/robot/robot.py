@@ -19,6 +19,8 @@ class RobotConfig:
     friction: float = 0.8
     scale: float = 1.0
     fixed: bool = False
+    initial_position: Optional[np.ndarray] = None
+    initial_orientation: Optional[np.ndarray] = None
 
 
 class Robot:
@@ -39,15 +41,18 @@ class Robot:
         self.morph = gs.morphs.URDF(
             file=config.urdf_path, scale=config.scale, fixed=config.fixed
         )
-
-        # Create robot material using Tool material for robots
-        self.material = gs.materials.Tool(friction=config.friction)
-
-        # Create robot surface
-        self.surface = gs.surfaces.Default()
-
-        # Add robot to scene (URDF robots do not need material or surface)
+        # URDF robots don't need materials and surfaces
         self.entity = self.scene.add_entity(morph=self.morph)
+
+        # Get joint names and DOF indices for control
+        self.dofs_idx = list(range(self.entity.n_dofs))
+
+        # # Set control gains for better stability
+        # kp = np.array([1000.0] * self.entity.n_dofs)  # Position gains
+        # kv = np.array([100.0] * self.entity.n_dofs)   # Velocity gains
+
+        # self.entity.set_dofs_kp(kp, self.dofs_idx)
+        # self.entity.set_dofs_kv(kv, self.dofs_idx)
 
         # Initialize state
         self.position = np.zeros(3)
@@ -77,8 +82,9 @@ class Robot:
             action_type: Type of action ("joint", "base_velocity", "magic")
         """
         if action_type == "joint":
-            # Apply joint position control
-            self.entity.control_dofs_position(action)
+            # Apply joint position control using Genesis pattern
+            # Set control command before stepping (will be executed in next step)
+            self.entity.control_dofs_position(action, self.dofs_idx)
         elif action_type == "base_velocity":
             # Apply base velocity control
             self.entity.control_base_velocity(action)
@@ -105,8 +111,15 @@ class Robot:
         """
         if position is not None:
             self.entity.set_pos(position)
+        else:
+            # Reset to default position slightly above ground
+            self.entity.set_pos(np.array([0.0, 0.0, 0.5]))
+
         if orientation is not None:
             self.entity.set_quat(orientation)
+        else:
+            # Reset to default orientation (upright)
+            self.entity.set_quat(np.array([1.0, 0.0, 0.0, 0.0]))
 
         # Reset joint positions to zero
         self.entity.set_dofs_position(np.zeros(self.entity.n_dofs))

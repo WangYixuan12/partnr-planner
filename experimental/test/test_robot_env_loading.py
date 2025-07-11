@@ -11,6 +11,7 @@ import time
 # Initialize Genesis before any imports
 import genesis as gs
 import numpy as np
+import transforms3d as t3
 
 gs.init(backend=gs.gpu)  # Use GPU backend
 
@@ -27,7 +28,9 @@ def test_robot_loading():
     # Create robot configuration with actual URDF path
     robot_config = RobotConfig(
         urdf_path="/home/yixuan/partnr-planner/data/robots/vega-urdf/vega_no_effector.urdf",
-        fixed=True,
+        fixed=False,  # Allow robot to move
+        initial_position=np.array([0.0, 0.0, 0.5]),  # Position above ground
+        initial_orientation=np.array([1.0, 0.0, 0.0, 0.0]),  # Upright orientation
     )
     print(f"  ✓ Robot config created: {robot_config}")
 
@@ -80,7 +83,9 @@ def test_env_robot_creation():
     # Create robot and environment config
     robot_config = RobotConfig(
         urdf_path="/home/yixuan/partnr-planner/data/robots/vega-urdf/vega_no_effector.urdf",
-        fixed=True,
+        fixed=False,  # Allow robot to move
+        initial_position=np.array([0.0, 0.0, 0.5]),  # Position above ground
+        initial_orientation=np.array([1.0, 0.0, 0.0, 0.0]),  # Upright orientation
     )
     env_config = EnvironmentConfig(robot_config=robot_config)
     print(f"  ✓ Environment config created: grasp_mode={env_config.grasp_mode.value}")
@@ -112,7 +117,9 @@ def test_environment_modes():
     # Create environment with realistic modes
     robot_config = RobotConfig(
         urdf_path="/home/yixuan/partnr-planner/data/robots/vega-urdf/vega_no_effector.urdf",
-        fixed=True,
+        fixed=False,  # Allow robot to move
+        initial_position=np.array([0.0, 0.0, 0.5]),  # Position above ground
+        initial_orientation=np.array([1.0, 0.0, 0.0, 0.0]),  # Upright orientation
     )
     env_config = EnvironmentConfig(
         robot_config=robot_config,
@@ -152,12 +159,16 @@ def example_realistic_scene_with_viewer():
         "data/hssd-hab/scenes-partnr-filtered/108736824_177263559.scene_instance.json"
     )
     # Optionally, add a robot
+    # quat = t3.euler.euler2quat(3.0*np.pi/2.0, 0.0, 0.0)
+    quat = t3.euler.euler2quat(0.0, 0.0, 0.0)
     robot_config = RobotConfig(
         urdf_path="/home/yixuan/partnr-planner/data/robots/vega-urdf/vega_no_effector.urdf",
-        fixed=True,
+        fixed=False,  # Allow robot to move
+        initial_position=np.array([3.0, 2.0, 0.01]),  # Position above ground
+        initial_orientation=quat,  # Upright orientation
     )
     env_config = EnvironmentConfig(
-        show_viewer=False,
+        show_viewer=True,
         scene_instance_path=scene_instance_path,
         stage_mesh_path=stage_mesh_path,
         robot_config=robot_config,
@@ -168,8 +179,9 @@ def example_realistic_scene_with_viewer():
     )
     # Step the simulation for a while
     for _ in range(1000):
-        env.scene.step()
-        img, _, _, _ = env.cameras["robot"].render()
+        # env.scene.step()
+        env.step({"robot": np.zeros(env.robot.entity.n_dofs)})
+        # img, _, _, _ = env.cameras["robot"].render()
         # time.sleep(0.01)
     env.close()
     print("  ✅ Realistic scene with viewer example completed")

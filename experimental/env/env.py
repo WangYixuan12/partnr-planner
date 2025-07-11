@@ -4,6 +4,7 @@ Simple Environment class for Genesis backend.
 Manages scene, robot, and provides environment interface.
 """
 
+import json
 import os
 import sys
 from dataclasses import dataclass
@@ -12,6 +13,7 @@ from typing import Any, Dict, Optional
 
 import numpy as np
 import torch
+import transforms3d as t3
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
@@ -59,11 +61,23 @@ class Environment:
         self.config = config
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-        self.scene = None
+        viewer_opts = gs.options.ViewerOptions(
+            res=(1280, 720),
+            camera_pos=(8, 8, 6),
+            camera_lookat=(0, 0, 0),
+            camera_up=(0, 1, 0),
+            camera_fov=40,
+            enable_interaction=True,
+        )
+        self.scene = gs.Scene(
+            show_viewer=config.show_viewer, viewer_options=viewer_opts
+        )
         self.robot = None
         self.cameras: dict[str, gs.vis.camera.Camera] = {}
         self.step_count = 0
         self.max_steps = 1000
+
+        self.scene.add_entity(gs.morphs.Plane(pos=np.array([0.0, 0.0, -0.02])))
 
         # Load scene and objects if specified
         if config.scene_instance_path and config.stage_mesh_path:
@@ -72,13 +86,18 @@ class Environment:
                 config.scene_instance_path,
                 show_viewer=config.show_viewer,
             )
-        else:
-            # Fallback: create empty scene
-            self.scene = gs.Scene(show_viewer=config.show_viewer)
-            if config.robot_config is not None:
-                self.robot = Robot(config.robot_config, self.scene)
-            self._setup_cameras()
-            self.scene.build()
+
+        if config.robot_config is not None:
+            self.robot = Robot(config.robot_config, self.scene)
+
+        self._setup_cameras()
+        self.scene.build()
+
+        if self.robot is not None:
+            if self.config.robot_config.initial_position is not None:
+                self.robot.entity.set_pos(self.config.robot_config.initial_position)
+            if self.config.robot_config.initial_orientation is not None:
+                self.robot.entity.set_quat(self.config.robot_config.initial_orientation)
 
     def _setup_cameras(self) -> None:
         """Setup cameras for observations"""
@@ -117,16 +136,9 @@ class Environment:
             scene_instance_path: Path to the .scene_instance.json file
             show_viewer: Whether to enable the interactive viewer
         """
-        viewer_opts = gs.options.ViewerOptions(
-            res=(1280, 960),
-            camera_pos=(8, 8, 6),
-            camera_lookat=(0, 0, 0),
-            camera_up=(0, 1, 0),
-            camera_fov=40,
-            enable_interaction=True,
-        )
-        self.scene = gs.Scene(show_viewer=show_viewer, viewer_options=viewer_opts)
         # Add the main room mesh
+        room_pos = np.array([0.0, 0.0, 0.0])
+        room_quat = t3.euler.euler2quat(np.pi / 2.0, 0.0, 0.0)
         if stage_mesh_path.endswith(".glb"):
             stage_mesh_decompressed_path = f"{stage_mesh_path}.decompressed.glb"
             if not os.path.exists(stage_mesh_decompressed_path):
@@ -137,13 +149,22 @@ class Environment:
                     f"gltf-transform ktxdecompress {stage_mesh_path} {stage_mesh_decompressed_path}"
                 )
             room_mesh = gs.morphs.Mesh(
-                file=stage_mesh_decompressed_path, scale=1.0, fixed=True
+                file=stage_mesh_decompressed_path,
+                scale=1.0,
+                fixed=True,
+                pos=room_pos,
+                quat=room_quat,
             )
         else:
-            room_mesh = gs.morphs.Mesh(file=stage_mesh_path, scale=1.0, fixed=True)
+            room_mesh = gs.morphs.Mesh(
+                file=stage_mesh_path,
+                scale=1.0,
+                fixed=True,
+                pos=room_pos,
+                quat=room_quat,
+            )
         self.scene.add_entity(morph=room_mesh)
         # Load and place all objects from the scene_instance.json
-        import json
 
         with open(scene_instance_path, "r") as f:
             scene_data = json.load(f)
@@ -163,8 +184,17 @@ class Environment:
                 os.system(
                     f"gltf-transform ktxdecompress {mesh_path} {decompress_mesh_path}"
                 )
-            pos = tuple(obj.get("translation", [0, 0, 0]))
-            quat = tuple(obj.get("rotation", [1, 0, 0, 0]))  # wxyz
+            obj_pos = tuple(obj.get("translation", [0, 0, 0]))
+            obj_quat = tuple(obj.get("rotation", [1, 0, 0, 0]))  # wxyz
+            room_t_obj = np.eye(4)
+            room_t_obj[:3, :3] = t3.quaternions.quat2mat(obj_quat)
+            room_t_obj[:3, 3] = obj_pos
+            world_t_room = np.eye(4)
+            world_t_room[:3, :3] = t3.quaternions.quat2mat(room_quat)
+            world_t_room[:3, 3] = room_pos
+            world_t_obj = world_t_room @ room_t_obj
+            pos = world_t_obj[:3, 3]
+            quat = t3.quaternions.mat2quat(world_t_obj[:3, :3])
             scale = obj.get("non_uniform_scale", 1.0)
             motion_type = obj.get("motion_type", "static")
             fixed = motion_type == "static"
@@ -172,11 +202,6 @@ class Environment:
                 file=decompress_mesh_path, pos=pos, quat=quat, scale=scale, fixed=fixed
             )
             self.scene.add_entity(morph=mesh)
-        # Add robot if specified
-        if self.config.robot_config is not None:
-            self.robot = Robot(self.config.robot_config, self.scene)
-        self._setup_cameras()
-        self.scene.build()
 
     def reset(self) -> Dict[str, Any]:
         """

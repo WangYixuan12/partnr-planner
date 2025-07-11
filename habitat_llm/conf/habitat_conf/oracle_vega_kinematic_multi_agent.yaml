@@ -74,8 +74,8 @@ habitat:
             uuid: head_rgb
           head_depth_sensor:
             type: HabitatSimDepthSensor
-            height: 256
-            width: 256
+            height: 1024
+            width: 1024
             position:
             - 0.0
             - 1.25

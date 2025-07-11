@@ -19,7 +19,6 @@ import os
 import sys
 import time
 import tkinter as tk
-from queue import Full
 
 import magnum as mn
 import numpy as np
@@ -70,10 +69,13 @@ class RobotController:
         # Control parameters
         self._movement_speed = 0.1
         self._rotation_speed = 0.05
-        self._head_rotation_speed = 0.1
+        self._head_rotation_speed = 0.05
 
         # Input state
         self._keys_pressed: set[str] = set()
+
+        # Recording state
+        self._is_recording = False
 
         # Habitat-sim setup
         # self._sim = sim
@@ -82,10 +84,20 @@ class RobotController:
         self._camera_names = camera_names
 
         # Tkinter setup
-        self._root = None
-        self._canvas = None
-        self._photo = None
         self._window_size = (1024 * len(self._camera_names), 1024)
+        self._root = tk.Tk()
+        self._root.title("Robot Controller")
+        self._root.geometry(f"{self._window_size[0]}x{self._window_size[1]}")
+
+        # Create canvas for image display
+        self._canvas = tk.Canvas(
+            self._root,
+            width=self._window_size[0],
+            height=self._window_size[1],
+            bg="black",
+        )
+        self._canvas.pack(fill=tk.BOTH, expand=True)
+        self._photo = None
 
         # IK solver
         self._kin_helper = KinHelper("vega")
@@ -135,26 +147,26 @@ class RobotController:
 
         # Rotate head left/right (J/L) - yaw control
         if "j" in self._keys_pressed:
-            self._head_beta -= self._head_rotation_speed
-        if "l" in self._keys_pressed:
             self._head_beta += self._head_rotation_speed
+        if "l" in self._keys_pressed:
+            self._head_beta -= self._head_rotation_speed
 
-        # Rotate head roll (4/6) - roll control (less used)
-        if "4" in self._keys_pressed:
+        # Rotate head up/down (up/down) - pitch control
+        if "up" in self._keys_pressed:
             self._head_gamma -= self._head_rotation_speed
-        if "6" in self._keys_pressed:
+        if "down" in self._keys_pressed:
             self._head_gamma += self._head_rotation_speed
 
-        # Move head up/down (5/8) - pitch control
-        if "8" in self._keys_pressed:
+        # Roll head left/right (left/right) - roll control (less used)
+        if "right" in self._keys_pressed:
             self._head_alpha += self._head_rotation_speed
-        if "5" in self._keys_pressed:
+        if "left" in self._keys_pressed:
             self._head_alpha -= self._head_rotation_speed
 
         # Apply head movements using IK solver
         if any(
             key in self._keys_pressed
-            for key in ["i", "k", "j", "l", "4", "6", "8", "5"]
+            for key in ["i", "k", "j", "l", "left", "right", "up", "down"]
         ):
             # Access the articulated agent to get current joint positions
             articulated_agent = self._env_interface.sim.get_agent_data(
@@ -301,6 +313,12 @@ class RobotController:
 
         if key == "r":
             self._reset_robot_and_camera()
+        elif key == "c":
+            self._is_recording = True
+            print("Recording started - press 'x' to stop")
+        elif key == "x":
+            self._is_recording = False
+            print("Recording stopped")
         elif key == "escape":
             self._root.quit()
 
@@ -310,25 +328,12 @@ class RobotController:
         if key in self._keys_pressed:
             self._keys_pressed.remove(key)
 
-    def run(self):
+    def run(self, save_views=None) -> dict:
         """Main run loop with Tkinter GUI (blocking mode)."""
         print("Starting Robot Controller with Tkinter")
         print("Controls: WASD to move robot, QE to rotate, R to reset, ESC to exit")
         print("Head controls: I/K for up/down, J/L for left/right, 4/6 for roll")
-
-        # Create Tkinter window
-        self._root = tk.Tk()
-        self._root.title("Robot Controller")
-        self._root.geometry(f"{self._window_size[0]}x{self._window_size[1]}")
-
-        # Create canvas for image display
-        self._canvas = tk.Canvas(
-            self._root,
-            width=self._window_size[0],
-            height=self._window_size[1],
-            bg="black",
-        )
-        self._canvas.pack(fill=tk.BOTH, expand=True)
+        print("Recording: C to start recording, X to stop recording")
 
         # Bind events
         self._canvas.bind("<KeyPress>", self._key_press)
@@ -336,6 +341,11 @@ class RobotController:
 
         # Focus on canvas for keyboard input
         self._canvas.focus_set()
+
+        self.obs_hist: dict = {}
+        if save_views is not None:
+            for camera_name in save_views:
+                self.obs_hist[camera_name] = []
 
         def update():
             """Update function called by Tkinter."""
@@ -347,6 +357,14 @@ class RobotController:
                     # Get the image data from observation
                     image_data = obs[camera_name]
                     images.append(image_data)
+
+                if (
+                    save_views is not None
+                    and self._is_recording
+                    and len(self._keys_pressed) > 0
+                ):
+                    for camera_name in save_views:
+                        self.obs_hist[camera_name].append(obs[camera_name])
 
             image_data = np.concatenate(images, axis=1)
 
@@ -362,28 +380,7 @@ class RobotController:
         # Start Tkinter main loop
         self._root.mainloop()
 
-    def update_image(self, image_data):
-        """Update the image in the GUI thread (non-blocking)."""
-        try:
-            # Send image to GUI thread
-            self._gui_queue.put_nowait(image_data)
-        except Full:
-            # Queue is full, skip this frame
-            pass
-
-    def stop_thread(self):
-        """Stop the controller thread."""
-        if self._gui_thread and self._gui_thread.is_alive():
-            if self._root:
-                self._root.quit()
-            self._gui_thread.join(timeout=5)
-            print("Stopped Robot Controller thread")
-        else:
-            print("No controller thread to stop")
-
-    def is_thread_running(self):
-        """Check if the controller thread is running."""
-        return self._gui_thread and self._gui_thread.is_alive()
+        return self.obs_hist
 
 
 # Method to load agent planner from the config
