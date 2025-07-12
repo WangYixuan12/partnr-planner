@@ -19,9 +19,7 @@ import os
 import sys
 import time
 
-import cv2
 import numpy as np
-from matplotlib import cm
 
 # Add habitat-lab to path for imports
 sys.path.insert(
@@ -30,6 +28,7 @@ sys.path.insert(
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../"))
 
 import hydra
+from yixuan_utilities.hdf5_utils import save_dict_to_hdf5
 
 from habitat_llm.agent.env import (
     EnvironmentInterface,
@@ -57,6 +56,8 @@ def data_collection(config):
 
     # Create dataset
     dataset = CollaborationDatasetV0(config.habitat.dataset)
+    episode_id = 76
+    dataset.episodes = dataset.episodes[episode_id : episode_id + 1]
 
     # Register sensors, actions, and measures
     register_sensors(config)
@@ -71,17 +72,41 @@ def data_collection(config):
         env_interface=env_interface, agent_idx=0, camera_names=["third_rgb", "head_rgb"]
     )
     obs_hist = controller.run(save_views=["head_rgb", "head_depth"])
-    for i in range(len(obs_hist["head_rgb"])):
-        head_rgb = obs_hist["head_rgb"][i]
-        head_depth = obs_hist["head_depth"][i]
-        head_depth_vis = np.clip(head_depth, 0, 2) / 2.0
-        colormap = cm.get_cmap("viridis")
-        head_depth_vis = colormap(head_depth_vis[:, :, 0])[:, :, :3] * 255
-        head_depth_vis = head_depth_vis.astype(np.uint8)
-        concat_img = np.concatenate([head_rgb, head_depth_vis], axis=1)
-        concat_img = cv2.cvtColor(concat_img, cv2.COLOR_RGB2BGR)
-        cv2.imshow("concat_img", concat_img)
-        cv2.waitKey(30)
+    # for i in range(len(obs_hist["head_rgb"])):
+    #     head_rgb = obs_hist["head_rgb"][i]
+    #     head_depth = obs_hist["head_depth"][i]
+    #     head_depth_vis = np.clip(head_depth, 0, 2) / 2.0
+    #     colormap = cm.get_cmap("viridis")
+    #     head_depth_vis = colormap(head_depth_vis[:, :, 0])[:, :, :3] * 255
+    #     head_depth_vis = head_depth_vis.astype(np.uint8)
+    #     concat_img = np.concatenate([head_rgb, head_depth_vis], axis=1)
+    #     concat_img = cv2.cvtColor(concat_img, cv2.COLOR_RGB2BGR)
+    #     cv2.imshow("concat_img", concat_img)
+    #     cv2.waitKey(30)
+    for k in obs_hist:
+        obs_hist[k] = np.stack(obs_hist[k], axis=0)
+    config_dict = {
+        "head_rgb": {
+            "dtype": "uint8",
+            "chunks": (
+                1,
+                obs_hist["head_rgb"].shape[1],
+                obs_hist["head_rgb"].shape[2],
+                3,
+            ),
+        },
+        "head_depth": {
+            "dtype": "float32",
+            "chunks": (
+                1,
+                obs_hist["head_depth"].shape[1],
+                obs_hist["head_depth"].shape[2],
+                1,
+            ),
+        },
+    }
+    os.system("mkdir -p data/my_data")
+    save_dict_to_hdf5(obs_hist, config_dict, f"data/my_data/episode_{episode_id}.hdf5")
 
     return 0
 

@@ -19,6 +19,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 import genesis as gs
 from robot.robot import Robot, RobotConfig
+from utils.mesh_utils import process_mesh_for_physics
 
 
 class GraspMode(Enum):
@@ -140,32 +141,33 @@ class Environment:
         room_pos = np.array([0.0, 0.0, 0.0])
         room_quat = t3.euler.euler2quat(np.pi / 2.0, 0.0, 0.0)
         if stage_mesh_path.endswith(".glb"):
-            stage_mesh_decompressed_path = f"{stage_mesh_path}.decompressed.glb"
-            if not os.path.exists(stage_mesh_decompressed_path):
-                # Decompress the mesh
-                # https://github.com/3dlg-hcvc/hssd/issues/25#issuecomment-3004660306
-                # https://github.com/Genesis-Embodied-AI/Genesis/issues/955
-                os.system(
-                    f"gltf-transform ktxdecompress {stage_mesh_path} {stage_mesh_decompressed_path}"
-                )
+            # Process mesh for physics (decompress + convex decomposition if needed)
+            processed_mesh_path = process_mesh_for_physics(
+                stage_mesh_path,
+                max_hulls=10000,
+                resolution=100000,
+            )
             room_mesh = gs.morphs.Mesh(
-                file=stage_mesh_decompressed_path,
-                scale=1.0,
-                fixed=True,
+                file=processed_mesh_path,
                 pos=room_pos,
                 quat=room_quat,
+                scale=1.0,
+                fixed=True,
+                decompose_object_error_threshold=0.0,
+                convexify=True,
             )
         else:
             room_mesh = gs.morphs.Mesh(
                 file=stage_mesh_path,
-                scale=1.0,
-                fixed=True,
                 pos=room_pos,
                 quat=room_quat,
+                scale=1.0,
+                fixed=True,
+                decompose_object_error_threshold=0.0,
+                convexify=True,
             )
         self.scene.add_entity(morph=room_mesh)
         # Load and place all objects from the scene_instance.json
-
         with open(scene_instance_path, "r") as f:
             scene_data = json.load(f)
         for obj in scene_data.get("object_instances", []):
@@ -174,16 +176,11 @@ class Environment:
             # TODO: temporary fix
             if not os.path.exists(mesh_path):
                 continue
-            decompress_mesh_path = (
-                f"data/hssd-hab/objects/{template[0]}/{template}.decompressed.glb"
+            processed_mesh_path = process_mesh_for_physics(
+                mesh_path,
+                max_hulls=1000,
+                resolution=100000,
             )
-            if not os.path.exists(decompress_mesh_path):
-                # Decompress the mesh
-                # https://github.com/3dlg-hcvc/hssd/issues/25#issuecomment-3004660306
-                # https://github.com/Genesis-Embodied-AI/Genesis/issues/955
-                os.system(
-                    f"gltf-transform ktxdecompress {mesh_path} {decompress_mesh_path}"
-                )
             obj_pos = tuple(obj.get("translation", [0, 0, 0]))
             obj_quat = tuple(obj.get("rotation", [1, 0, 0, 0]))  # wxyz
             room_t_obj = np.eye(4)
@@ -199,7 +196,13 @@ class Environment:
             motion_type = obj.get("motion_type", "static")
             fixed = motion_type == "static"
             mesh = gs.morphs.Mesh(
-                file=decompress_mesh_path, pos=pos, quat=quat, scale=scale, fixed=fixed
+                file=processed_mesh_path,
+                pos=pos,
+                quat=quat,
+                scale=scale,
+                fixed=fixed,
+                decompose_object_error_threshold=0.01,
+                convexify=True,
             )
             self.scene.add_entity(morph=mesh)
 

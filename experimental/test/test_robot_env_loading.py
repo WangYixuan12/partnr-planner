@@ -13,7 +13,7 @@ import genesis as gs
 import numpy as np
 import transforms3d as t3
 
-gs.init(backend=gs.gpu)  # Use GPU backend
+gs.init(backend=gs.constants.backend.gpu)  # Use GPU backend
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
@@ -103,7 +103,7 @@ def test_env_robot_creation():
     )
 
     # Step simulation to test physics
-    for _i in range(1000):
+    for _ in range(1000):
         env.step({"robot": np.zeros(env.robot.entity.n_dofs)})
         time.sleep(0.01)
 
@@ -164,7 +164,7 @@ def example_realistic_scene_with_viewer():
     robot_config = RobotConfig(
         urdf_path="/home/yixuan/partnr-planner/data/robots/vega-urdf/vega_no_effector.urdf",
         fixed=False,  # Allow robot to move
-        initial_position=np.array([3.0, 2.0, 0.01]),  # Position above ground
+        initial_position=np.array([-5.0, 4.0, 0.01]),  # Position above ground
         initial_orientation=quat,  # Upright orientation
     )
     env_config = EnvironmentConfig(
