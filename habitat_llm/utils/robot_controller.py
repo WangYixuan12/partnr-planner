@@ -346,6 +346,8 @@ class RobotController:
         if save_views is not None:
             for camera_name in save_views:
                 self.obs_hist[camera_name] = []
+                self.obs_hist[f"{camera_name}_extrinsic"] = []
+                self.obs_hist[f"{camera_name}_intrinsic"] = []
 
         def update():
             """Update function called by Tkinter."""
@@ -365,6 +367,39 @@ class RobotController:
                 ):
                     for camera_name in save_views:
                         self.obs_hist[camera_name].append(obs[camera_name])
+
+                        # Get camera extrinsic parameters
+                        tf = np.array(
+                            self._env_interface.sim._sensors[
+                                camera_name
+                            ]._sensor_object.render_camera.camera_matrix
+                        )
+                        tf = np.linalg.inv(tf)
+                        tf = tf @ np.array(
+                            [[1, 0, 0, 0], [0, -1, 0, 0], [0, 0, -1, 0], [0, 0, 0, 1]]
+                        )
+                        self.obs_hist[f"{camera_name}_extrinsic"].append(tf)
+
+                        # Get camera intrinsic parameters
+                        camera_spec = self._env_interface.sim._sensors[
+                            camera_name
+                        ]._spec
+                        hfov_rad = np.deg2rad(float(camera_spec.hfov))
+                        image_height, image_width = np.array(
+                            camera_spec.resolution
+                        ).tolist()
+
+                        # Calculate focal length from HFOV and image width
+                        fx = image_width / (2.0 * np.tan(hfov_rad / 2.0))
+                        fy = image_height / (2.0 * np.tan(hfov_rad / 2.0))
+                        cx = image_width / 2.0
+                        cy = image_height / 2.0
+                        intrinsic_matrix = np.array(
+                            [[fx, 0, cx], [0, fy, cy], [0, 0, 1]]
+                        )
+                        self.obs_hist[f"{camera_name}_intrinsic"].append(
+                            intrinsic_matrix
+                        )
 
             image_data = np.concatenate(images, axis=1)
 

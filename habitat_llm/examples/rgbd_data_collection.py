@@ -104,6 +104,14 @@ def data_collection(config):
                 1,
             ),
         },
+        "head_rgb_extrinsic": {
+            "dtype": "float32",
+            "chunks": (1, 4, 4),
+        },
+        "head_rgb_intrinsic": {
+            "dtype": "float32",
+            "chunks": (1, 3, 3),
+        },
     }
     os.system("mkdir -p data/my_data")
     save_dict_to_hdf5(obs_hist, config_dict, f"data/my_data/episode_{episode_id}.hdf5")
