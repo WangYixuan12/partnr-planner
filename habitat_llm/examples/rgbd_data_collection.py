@@ -56,7 +56,7 @@ def data_collection(config):
 
     # Create dataset
     dataset = CollaborationDatasetV0(config.habitat.dataset)
-    episode_id = 76
+    episode_id = 17
     dataset.episodes = dataset.episodes[episode_id : episode_id + 1]
 
     # Register sensors, actions, and measures

@@ -90,7 +90,7 @@ habitat:
             noise_model_kwargs: {}
             min_depth: 0.0
             max_depth: 10.0
-            normalize_depth: true
+            normalize_depth: False
             uuid: head_depth
           third_rgb_sensor:
             type: HabitatSimRGBSensor

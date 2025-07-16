@@ -22,6 +22,7 @@ import tkinter as tk
 
 import magnum as mn
 import numpy as np
+import quaternion
 from PIL import Image, ImageTk
 
 # Add habitat-lab to path for imports
@@ -374,7 +375,23 @@ class RobotController:
                                 camera_name
                             ]._sensor_object.render_camera.camera_matrix
                         )
-                        tf = np.linalg.inv(tf)
+                        pos = (
+                            self._env_interface.sim.get_agent(0)
+                            .get_state()
+                            .sensor_states[camera_name]
+                            .position
+                        )
+                        quat = (
+                            self._env_interface.sim.get_agent(0)
+                            .get_state()
+                            .sensor_states[camera_name]
+                            .rotation
+                        )
+                        tf = np.concatenate(
+                            [quaternion.as_rotation_matrix(quat), pos.reshape(3, 1)],
+                            axis=1,
+                        )
+                        tf = np.concatenate([tf, np.array([[0, 0, 0, 1]])], axis=0)
                         tf = tf @ np.array(
                             [[1, 0, 0, 0], [0, -1, 0, 0], [0, 0, -1, 0], [0, 0, 0, 1]]
                         )
