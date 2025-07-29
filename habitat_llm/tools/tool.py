@@ -16,7 +16,9 @@ outputs are in LANGUAGE so that it can be sent to the LLM.
 """
 
 from abc import ABC, abstractmethod
-from typing import List, Tuple
+from typing import List, Optional, Tuple
+
+from habitat_llm.tools.motor_skills.skill import SkillPolicy
 
 
 class Tool(ABC):
@@ -24,6 +26,7 @@ class Tool(ABC):
     def __init__(self, name_arg, agent_uid_arg=0):
         self.name = name_arg
         self.agent_uid = agent_uid_arg
+        self.skill: Optional[SkillPolicy] = None
 
     # Hashing Operator
     def __hash__(self):

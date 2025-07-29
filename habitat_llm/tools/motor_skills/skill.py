@@ -4,8 +4,9 @@
 
 import logging
 from abc import abstractmethod
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
+import magnum as mn
 import numpy as np
 import torch
 from habitat.tasks.rearrange.rearrange_sensors import IsHoldingSensor
@@ -14,6 +15,7 @@ from habitat_baselines.rl.ppo.policy import Policy
 from habitat_baselines.utils.common import get_num_actions
 
 from habitat_llm.agent.env.actions import find_action_range
+from habitat_llm.agent.env.environment_interface import EnvironmentInterface
 from habitat_llm.world_model import Furniture, Object, Room
 
 if hasattr(torch, "inference_mode"):
@@ -39,6 +41,7 @@ class SkillPolicy(Policy):
         self._should_keep_hold_state = should_keep_hold_state
         self._cur_skill_step = torch.zeros(self._batch_size)
         self.device = self._cur_skill_step.device
+        self.env: Optional[EnvironmentInterface] = None
 
         self.action_assigned = False
         self._is_action_issued = torch.zeros(self._batch_size)
@@ -235,7 +238,7 @@ class SkillPolicy(Policy):
 
         return
 
-    def set_target(self, target_name: str, env):
+    def set_target_by_name(self, target_name: str, env):
         """
         Set the target (receptacle, object) of the skill.
 
@@ -300,6 +303,86 @@ class SkillPolicy(Policy):
         self.target_handle = entity.sim_handle
         if hasattr(self, "_target_name"):
             self._target_name = target_name
+
+        # Set target pos
+        self.target_pos = entity.get_property("translation")
+
+        # Set flag to True to avoid resetting the target
+        self.target_is_set = True
+
+        return
+
+    def set_target(self, target_pos: mn.Vector3, env):
+        """
+        Set the target (receptacle, object) of the skill.
+
+        :param target_name: The name of the target Entity.
+        """
+
+        # Early return if the target is already set
+        if self.target_is_set:
+            return
+
+        # Get entity based on the target
+        all_objs = self.env.world_graph[self.agent_uid].get_all_objects()
+        objs_pos = [np.array(obj.get_property("translation")) for obj in all_objs]
+        objs_pos = np.stack(objs_pos)
+        target_pos = np.array(target_pos)
+        dists = np.linalg.norm(objs_pos - target_pos, axis=1)
+        closest_obj_idx = np.argmin(dists)
+        entity = all_objs[closest_obj_idx]
+
+        # non-privileged graph entities do not have any sim-handle; this logic handles assigning the
+        # sim-handle of closest sim-object/furniture entity to non-privileged object/furniture entity respectively
+        if entity.sim_handle is None:
+            # find closest entity to assign as proxy sim-handle
+            # TODO: @zephirefaith :BE: is there a way to make following less brittle
+            if type(self).__name__ == "PlaceSkillPolicy":
+                all_gt_entities = self.env.perception.gt_graph.get_all_nodes_of_type(
+                    Furniture
+                )
+                # only keep furniture with placeable receptacle
+                all_gt_entities = [
+                    ent
+                    for ent in all_gt_entities
+                    if ent.sim_handle in self.env.perception.fur_to_rec
+                ]
+            elif type(self).__name__ == "PickSkillPolicy":
+                all_gt_entities = self.env.perception.gt_graph.get_all_nodes_of_type(
+                    Object
+                )
+            elif type(self).__name__ == "NavSkillPolicy":
+                all_gt_entities = (
+                    self.env.perception.gt_graph.get_all_nodes_of_type(Furniture)
+                    + self.env.perception.gt_graph.get_all_nodes_of_type(Object)
+                    + self.env.perception.gt_graph.get_all_nodes_of_type(Room)
+                )
+            # only keep entities that have a translation property
+            all_gt_entities = [
+                ent for ent in all_gt_entities if "translation" in ent.properties
+            ]
+
+            # find the closest entity to given target
+            entity_positions = np.array(
+                [
+                    np.array(entity.properties["translation"])
+                    for entity in all_gt_entities
+                ]
+            )
+            entity_distance = np.linalg.norm(
+                entity_positions - np.array(entity.properties["translation"]),
+                axis=1,
+            )
+            closest_entity_idx = np.argmin(entity_distance)
+            entity.sim_handle = all_gt_entities[closest_entity_idx].sim_handle
+            self._logger.debug(
+                f"Detected non-sim object. Matched {all_gt_entities[closest_entity_idx].name} with non-sim object {entity.name}"
+            )
+
+        # Get sim handle of the target
+        self.target_handle = entity.sim_handle
+        if hasattr(self, "_target_name"):
+            self._target_name = entity.name
 
         # Set target pos
         self.target_pos = entity.get_property("translation")

@@ -52,7 +52,7 @@ class HabitatViewer:
     environments with mouse and keyboard camera controls.
     """
 
-    def __init__(self, sim=None, agent_idx=0, camera_name="third_rgb"):
+    def __init__(self, sim=None, camera_name="third_rgb"):
         # Camera state
         self._camera_position = mn.Vector3(0, 2, -5)
         self._camera_target = mn.Vector3(0, 0, 0)
@@ -75,7 +75,6 @@ class HabitatViewer:
 
         # Habitat-sim setup
         self._sim = sim
-        self._agent_idx = agent_idx
         self._camera_name = camera_name
 
         # Tkinter setup
@@ -93,12 +92,6 @@ class HabitatViewer:
         self._gui_thread = None
         self._gui_queue = Queue(maxsize=20)
         self._gui_ready = threading.Event()
-
-    def _reset_camera(self) -> None:
-        """Reset camera to default position."""
-        self._camera_position = mn.Vector3(0, 2, -5)
-        self._camera_target = mn.Vector3(0, 0, 0)
-        self._camera_distance = 5.0
 
     def _mouse_callback(self, event):
         """Tkinter mouse callback for handling mouse events."""
@@ -253,10 +246,20 @@ class HabitatViewer:
         key = event.keysym.lower()
         self._keys_pressed.add(key)
 
-        if key == "r":
-            self._reset_camera()
-        elif key == "escape":
+        if key == "escape":
             self._root.quit()
+
+    def _is_camera_updated(self):
+        return (
+            self._mouse_delta != (0, 0)
+            or self._mouse_scroll != 0
+            or "w" in self._keys_pressed
+            or "s" in self._keys_pressed
+            or "a" in self._keys_pressed
+            or "d" in self._keys_pressed
+            or "q" in self._keys_pressed
+            or "e" in self._keys_pressed
+        )
 
     def _key_release(self, event):
         """Handle key release events."""
@@ -310,25 +313,27 @@ class HabitatViewer:
 
         def update():
             """Update function called by Tkinter."""
-            # Handle camera controls
-            self._handle_camera_zoom()
-            self._handle_camera_movement()
+            # If there is camera motion
+            if self._is_camera_updated():
+                # Handle camera controls
+                self._handle_camera_zoom()
+                self._handle_camera_movement()
 
-            # Update camera transform
-            camera_transform = self._update_camera_transform()
+                # Update camera transform
+                camera_transform = self._update_camera_transform()
 
-            # Set camera transform
-            rot = mn.Quaternion.from_matrix(camera_transform.rotation_scaling())
-            trans = self._camera_position
-            self._sim._sensors[
-                self._camera_name
-            ]._sensor_object.node.translation = trans
-            self._sim._sensors[self._camera_name]._sensor_object.node.rotation = rot
-            self._sim._sensors[
-                self._camera_name
-            ]._sensor_object.node.transformation = mn.Matrix4.from_(
-                rot.to_matrix(), trans
-            )
+                # Set camera transform
+                rot = mn.Quaternion.from_matrix(camera_transform.rotation_scaling())
+                trans = self._camera_position
+                self._sim._sensors[
+                    self._camera_name
+                ]._sensor_object.node.translation = trans
+                self._sim._sensors[self._camera_name]._sensor_object.node.rotation = rot
+                self._sim._sensors[
+                    self._camera_name
+                ]._sensor_object.node.transformation = mn.Matrix4.from_(
+                    rot.to_matrix(), trans
+                )
 
             # Render observation
             obs = self._sim.get_sensor_observations()
@@ -401,25 +406,29 @@ class HabitatViewer:
 
             def update():
                 """Update function called by Tkinter."""
-                # Handle camera controls
-                self._handle_camera_zoom()
-                self._handle_camera_movement()
+                # If there is camera motion
+                if self._is_camera_updated():
+                    # Handle camera controls
+                    self._handle_camera_zoom()
+                    self._handle_camera_movement()
 
-                # Update camera transform
-                camera_transform = self._update_camera_transform()
+                    # Update camera transform
+                    camera_transform = self._update_camera_transform()
 
-                # Set camera transform
-                rot = mn.Quaternion.from_matrix(camera_transform.rotation_scaling())
-                trans = self._camera_position
-                self._sim._sensors[
-                    self._camera_name
-                ]._sensor_object.node.translation = trans
-                self._sim._sensors[self._camera_name]._sensor_object.node.rotation = rot
-                self._sim._sensors[
-                    self._camera_name
-                ]._sensor_object.node.transformation = mn.Matrix4.from_(
-                    rot.to_matrix(), trans
-                )
+                    # Set camera transform
+                    rot = mn.Quaternion.from_matrix(camera_transform.rotation_scaling())
+                    trans = self._camera_position
+                    self._sim._sensors[
+                        self._camera_name
+                    ]._sensor_object.node.translation = trans
+                    self._sim._sensors[
+                        self._camera_name
+                    ]._sensor_object.node.rotation = rot
+                    self._sim._sensors[
+                        self._camera_name
+                    ]._sensor_object.node.transformation = mn.Matrix4.from_(
+                        rot.to_matrix(), trans
+                    )
 
                 # Get image from main thread
                 try:
@@ -511,7 +520,7 @@ def run_viewer(config):
     sim = env_interface.env.env.env._env.sim
 
     # Create viewer with simulator
-    app = HabitatViewer(sim=sim, agent_idx=0, camera_name="gui_rgb")
+    app = HabitatViewer(sim=sim, camera_name="gui_rgb")
     app.run(non_blocking=False)
 
     while True:

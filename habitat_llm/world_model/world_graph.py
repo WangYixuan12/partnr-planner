@@ -6,7 +6,7 @@
 
 import logging
 from collections import defaultdict
-from typing import List, Optional, Union
+from typing import List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -192,7 +192,10 @@ class WorldGraph(Graph):
         for obj in all_objs:
             if self.is_object_with_agent(obj, agent_type="robot"):
                 objs_info += obj.name + ": " + spot_node.name + "\n"
-            elif self.is_object_with_agent(obj, agent_type="human") and human_node is not None:
+            elif (
+                self.is_object_with_agent(obj, agent_type="human")
+                and human_node is not None
+            ):
                 objs_info += obj.name + ": " + human_node.name + "\n"
             else:
                 furniture = self.find_furniture_for_object(obj)
@@ -618,3 +621,54 @@ class WorldGraph(Graph):
         else:
             within_threshold = closest
         return within_threshold
+
+    def update_non_privileged_graph_by_action(
+        self,
+        agent_uid: int,
+        high_level_action: Tuple[str, str, Optional[str]],
+        action_response: str,
+        verbose: bool = False,
+        drop_placed_object_flag: bool = True,
+    ):
+        pass
+
+    def update_by_other_agent_action(
+        self,
+        other_agent_uid: int,
+        high_level_action_and_args: Tuple[str, str, Optional[str]],
+        action_results: str,
+        use_semantic_similarity: bool = False,
+        verbose: bool = False,
+    ):
+        pass
+
+    def update_by_action(
+        self,
+        agent_uid: int,
+        high_level_action: Tuple[str, str, Optional[str]],
+        action_response: str,
+        verbose: bool = False,
+    ):
+        """
+        Deterministically updates the world-graph based on last-action taken by agent_{agent_uid} based on the result of that action.
+        Only updates the graph if the action was successful. Applicable only when one wants to change agent_{agent_uid}'s graph
+        based on agent_{agent_uid}'s actions.
+
+        Please look at update_by_other_agent_action or update_non_privileged_graph_by_other_agent_action for updating self graph based on another agent's actions.
+        """
+
+    def update_non_privileged_graph_by_other_agent_action(
+        self,
+        other_agent_uid: int,
+        high_level_action_and_args: Tuple[str, str, Optional[str]],
+        action_results: str,
+        verbose: bool = False,
+        drop_placed_object_flag: bool = True,
+    ):
+        """
+        ONLY FOR USE WITH NON-PRIVILEGED GRAPH
+
+        Deterministically change self graph based on successful execution of a given action by another agent. The arguments to action
+        are based on other agent's identifiers so this method implements essential logic for mapping them back to most likely match in
+        self graph, e.g. what the Human agent calls 161_chest_of_drawers may be 11_chest_of_drawers for Spot.
+        """

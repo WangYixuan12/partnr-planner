@@ -10,6 +10,7 @@ import torch
 from omegaconf import DictConfig, OmegaConf
 from task_3d_repr.memory.scene_mem_v3 import SceneMemV3
 
+from habitat_llm.agent.agent import Agent
 from habitat_llm.agent.env import (
     EnvironmentInterface,
     register_actions,
@@ -95,6 +96,95 @@ def execute_low_level_action(
         print(f"Failed to execute action '{action_name}': {e}")
 
 
+def localize_table_in_living_room(scene: SceneMemV3, synonyms=None, eps=1e-8):
+    """
+    Returns: (best_idx, obj, pose_dict)
+        - best_idx: index in scene.objects
+        - obj: the MapObject (dict-like)
+        - pose_dict: {"center": (3,), "R": (3,3), "extent": (3,)}
+    """
+    # 1) Robust text queries
+    #    Use synonyms to cover naming variations; "bedroom" gives contextual bias.
+    table_terms = [
+        "table",
+        "bedside table",
+        "nightstand",
+        "side table",
+        "living room table",
+    ]
+    if synonyms is not None:
+        table_terms = synonyms
+
+    # Object score = max over table synonyms
+    table_scores = [scene.query_text(t) for t in table_terms]
+    s_table = np.max(np.stack(table_scores, axis=0), axis=0)  # (N_obj,)
+
+    # Context score = bedroom
+    s_bedroom = scene.query_text("living room")  # (N_obj,)
+
+    # 2) Fuse scores.
+    #    Use log-sum (equivalent to adding logits) for stability with your softmaxed outputs.
+    fused = np.log(s_table + eps) + np.log(s_bedroom + eps)  # (N_obj,)
+
+    # 3) Pick the best object
+    best_idx = int(np.argmax(fused))
+    obj = scene.objects[best_idx]
+
+    # 4) Extract 3D localization from the stored bbox
+    bbox = obj["bbox"]
+    pose = {
+        "center": np.asarray(bbox.center),  # (x, y, z) in world frame
+        "R": np.asarray(bbox.R),  # 3x3 rotation
+        "extent": np.asarray(bbox.extent),  # box size (dx, dy, dz)
+    }
+    return best_idx, obj, pose
+
+
+def exec_skill(
+    agent: Agent,
+    env_interface: EnvironmentInterface,
+    action_name: str,
+    action_target: np.ndarray,
+    habitat_viewer: HabitatViewer,
+    vid_writer: cv2.VideoWriter,
+) -> None:
+    if action_name == "Navigate":
+        while (
+            np.linalg.norm(
+                np.array(
+                    env_interface.agents[0].articulated_agent.ee_transform().translation
+                )[0::2]
+                - np.array(action_target)[0::2]
+            )
+            > 1.0
+        ):
+            low_level_actions, response = agent.process_high_level_action(
+                action_name, action_target, {}
+            )
+            if len(low_level_actions) > 0:
+                obs, reward, done, info = env_interface.step({0: low_level_actions})
+                habitat_viewer.update_image(obs["third_rgb"])
+                vid_writer.write(cv2.cvtColor(obs["third_rgb"], cv2.COLOR_RGB2BGR))
+    elif action_name == "Pick":
+        while not agent.get_tool_from_name("Pick").skill.grasp_mgr.is_grasped:
+            low_level_actions, response = agent.process_high_level_action(
+                action_name, action_target, {}
+            )
+            if len(low_level_actions) > 0:
+                obs, reward, done, info = env_interface.step({0: low_level_actions})
+                habitat_viewer.update_image(obs["third_rgb"])
+                vid_writer.write(cv2.cvtColor(obs["third_rgb"], cv2.COLOR_RGB2BGR))
+    elif action_name == "Place":
+        while agent.get_tool_from_name("Place").skill.grasp_mgr.is_grasped:
+            low_level_actions, response = agent.process_high_level_action(
+                action_name, action_target, {}
+            )
+            if len(low_level_actions) > 0:
+                obs, reward, done, info = env_interface.step({0: low_level_actions})
+                habitat_viewer.update_image(obs["third_rgb"])
+                vid_writer.write(cv2.cvtColor(obs["third_rgb"], cv2.COLOR_RGB2BGR))
+
+
 @hydra.main(config_path="../conf")
 def main(config) -> None:
     fix_config(config)
@@ -111,48 +201,49 @@ def main(config) -> None:
     OmegaConf.set_struct(config, True)
 
     episode, instruction = get_episode_instruction(config, episode_idx)
-    print(f"Episode {episode_idx} instruction: {instruction}")
 
     scene_mem = load_scene_memory(config, mem_path)
-    print_memory_objects(scene_mem)
 
     env_interface: EnvironmentInterface = build_environment(config, episode_idx)
 
     # initialize habitat viewer
-    habitat_viewer = HabitatViewer(
-        sim=env_interface.sim, agent_idx=0, camera_name="third_rgb"
-    )
+    habitat_viewer = HabitatViewer(sim=env_interface.sim, camera_name="third_rgb")
     habitat_viewer.run(non_blocking=True)
     vid_writer = cv2.VideoWriter(
         "output.mp4", cv2.VideoWriter_fourcc(*"mp4v"), 30, (1024, 1024)
     )
 
     # initialize agent and planner
+    print(f"Episode {episode_idx} instruction: {instruction}")
     agents = init_agents(config.evaluation.agents, env_interface)
     for agent in agents:
         agent._dry_run = env_interface._dry_run
+    # Agents:
+    # Method 1: init_agents
+    # Method 2: env_interface.sim.get_agent(0)
+    # Method 3: env_interface.agents[0]
     planner_conf = config.evaluation.planner
     planner_cls = hydra.utils.instantiate(planner_conf)
     planner: Planner = planner_cls(env_interface=env_interface)
     planner.agents = agents
 
     salience = scene_mem.query_text("pineapple")
-    while True:
-        try:
-            max_salience_idx = np.argmax(salience)
-            sel_obj = scene_mem.objects[max_salience_idx]
-            target_pos = mn.Vector3(np.array(sel_obj["pcd"].points).mean(axis=0))
-            low_level_actions = agents[0].process_high_level_action(
-                "Navigate", target_pos, {}
-            )
-            if len(low_level_actions) > 0:
-                obs, reward, done, info = env_interface.step({0: low_level_actions[0]})
-                habitat_viewer.update_image(obs["third_rgb"])
-                vid_writer.write(cv2.cvtColor(obs["third_rgb"], cv2.COLOR_RGB2BGR))
-            else:
-                break
-        except KeyboardInterrupt:
-            break
+    max_salience_idx = np.argmax(salience)
+    sel_obj = scene_mem.objects[max_salience_idx]
+    target_pos = mn.Vector3(np.array(sel_obj["pcd"].points).mean(axis=0))
+    exec_skill(
+        agents[0], env_interface, "Navigate", target_pos, habitat_viewer, vid_writer
+    )
+    exec_skill(agents[0], env_interface, "Pick", target_pos, habitat_viewer, vid_writer)
+
+    best_idx, obj, pose = localize_table_in_living_room(scene_mem)
+    target_pos = mn.Vector3(np.array(obj["pcd"].points).mean(axis=0))
+    exec_skill(
+        agents[0], env_interface, "Navigate", target_pos, habitat_viewer, vid_writer
+    )
+    exec_skill(
+        agents[0], env_interface, "Place", target_pos, habitat_viewer, vid_writer
+    )
     vid_writer.release()
     print("Done")
 

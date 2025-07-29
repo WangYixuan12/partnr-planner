@@ -5,13 +5,14 @@
 # LICENSE file in the root directory of this source tree
 
 import random
-from typing import List
+from typing import List, Optional
 
 import torch
 from habitat_baselines.utils.common import get_num_actions
 from hydra.utils import instantiate
 from torch import nn
 
+from habitat_llm.agent.env.environment_interface import EnvironmentInterface
 from habitat_llm.tools import Tool
 
 # from habitat_llm.tools.motor_skills.reset_arm.reset_arm_skill import ResetArmSkill
@@ -21,7 +22,7 @@ class MotorSkillTool(Tool):
     def __init__(self, skill_config):
         super().__init__(skill_config.name)
         self.skill_config = skill_config
-        self.env = None
+        self.env: Optional[EnvironmentInterface] = None
         self.reset = None
         self._use_torchscript = False
         # Flag to determine whether to use torchscript (non-oracle skills) based on the name of file

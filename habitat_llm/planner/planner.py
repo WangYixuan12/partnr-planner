@@ -4,13 +4,14 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree
 
-from typing import TYPE_CHECKING, Any, Dict, List, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Tuple, Union
 
 from omegaconf import DictConfig
 
 if TYPE_CHECKING:
     from habitat_llm.agent import Agent
     from habitat_llm.agent.env import EnvironmentInterface
+    from habitat_llm.world_model.dynamic_world_graph import DynamicWorldGraph
     from habitat_llm.world_model.world_graph import WorldGraph
 
 
@@ -42,7 +43,7 @@ class Planner:
         self,
         instruction: str,
         observations: Dict[str, Any],
-        world_graph: Dict[int, "WorldGraph"],
+        world_graph: Dict[int, Union["DynamicWorldGraph", "WorldGraph"]],
     ) -> Tuple[Dict[int, Any], Dict[str, Any], bool]:
         """
         Gives the next low level action to execute.

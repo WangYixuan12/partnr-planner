@@ -6,7 +6,7 @@ import glob
 import json
 import os
 from collections import OrderedDict, defaultdict
-from typing import Any, Dict
+from typing import Any, Dict, Union
 
 import cv2
 import gym
@@ -159,7 +159,7 @@ class EnvironmentInterface:
         # dynamic world-graph for partial obs setting
 
         # each agent has its own world-graph
-        self.world_graph: Dict[int, Any] = {}
+        self.world_graph: Dict[int, Union[DynamicWorldGraph, WorldGraph]] = {}
 
         # create world-graphs for both agents
         if self.partial_obs:

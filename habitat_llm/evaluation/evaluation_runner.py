@@ -26,8 +26,9 @@ from habitat_llm.agent.env import EnvironmentInterface
 from habitat_llm.examples.example_utils import DebugVideoUtil
 from habitat_llm.planner.planner import Planner
 from habitat_llm.utils import cprint, rollout_print
+from habitat_llm.utils.habitat_viewer import HabitatViewer
 from habitat_llm.utils.sim import init_agents
-from habitat_llm.world_model import Entity, WorldGraph
+from habitat_llm.world_model import DynamicWorldGraph, Entity, WorldGraph
 
 
 @attr.s(auto_attribs=True)
@@ -47,7 +48,7 @@ class ActionHistoryElement:
     timestamp: int
     agent_uid: int
     response: str = ""
-    world_graph: Dict[int, WorldGraph] = None
+    world_graph: Dict[int, Union["DynamicWorldGraph", "WorldGraph"]] = None
     info: dict = attr.ib(factory=dict)
 
     def to_string(self) -> str:
@@ -129,13 +130,15 @@ class EvaluationRunner:
         self._write_out_world_graph: bool = dump_world_graph
         self._world_graph_write_out_frequency = 5
 
-        # self.habitat_viewer = HabitatViewer(sim=self.env_interface.env.env.env._env.sim, agent_idx=0, camera_name="gui_rgb")
+        self.habitat_viewer = HabitatViewer(
+            sim=self.env_interface.env.env.env._env.sim, camera_name="third_rgb"
+        )
         # self.robot_controller = RobotController(
         #     env_interface=self.env_interface,
         #     agent_idx=0,
         #     camera_names=["head_rgb", "third_rgb"],
         # )
-        # self.habitat_viewer.run(non_blocking=True)
+        self.habitat_viewer.run(non_blocking=True)
 
     def _initialize_planners(self):
         """
@@ -456,7 +459,10 @@ class EvaluationRunner:
             self.episode_filename = self.episode_filename[: self.TRUNCATE_LENGTH]
 
     def get_low_level_actions(
-        self, instruction: str, observations: dict, world_graph: Dict[int, WorldGraph]
+        self,
+        instruction: str,
+        observations: dict,
+        world_graph: Dict[int, Union["DynamicWorldGraph", "WorldGraph"]],
     ):
         """
         Given a set of observations, gets a vector of low level actions, an info dictionary and a boolean indicating that
@@ -618,7 +624,7 @@ class EvaluationRunner:
                 obs, reward, done, info = self.env_interface.step(low_level_actions)
                 # Refresh observations
                 observations = self.env_interface.parse_observations(obs)
-                # self.habitat_viewer.update_image(obs['gui_rgb'])
+                self.habitat_viewer.update_image(obs["third_rgb"])
 
                 # observations['agent_0_head_rgb']
                 if self.evaluation_runner_config.save_video:

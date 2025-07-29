@@ -6,6 +6,7 @@
 from typing import TYPE_CHECKING, List, Tuple
 
 import magnum as mn
+import numpy as np
 import torch
 
 from habitat_llm.agent.env.actions import find_action_range
@@ -79,7 +80,7 @@ class OraclePlaceSkill(SkillPolicy):
         self.spatial_constraint = None
         self.reference_object = None
 
-    def set_target(
+    def set_target_by_name(
         self,
         arg_string: str,
         env: "EnvironmentInterface",
@@ -171,6 +172,45 @@ class OraclePlaceSkill(SkillPolicy):
             self.reference_object = env.world_graph[self.agent_uid].get_node_from_name(
                 reference_object_name
             )
+
+        # Set flag to true
+        self.target_is_set = True
+
+        return
+
+    def set_target(
+        self,
+        target_pos: mn.Vector3,
+        env: "EnvironmentInterface",
+    ) -> None:
+        """The function to get furniture object, place location, place description.
+
+        :param target_string: a furniture name with id, e.g., table_0
+        :param env: an env
+        :return: do not return anything, but set the variables
+        """
+        # Early return if the target is already set
+        if self.target_is_set:
+            return
+
+        # place_entity_name
+        # object_to_be_moved
+        # spatial_relation
+        all_furnitures = self.env.world_graph[self.agent_uid].get_all_furnitures()
+        objs_pos = [np.array(obj.get_property("translation")) for obj in all_furnitures]
+        objs_pos = np.stack(objs_pos)
+        target_pos = np.array(target_pos)
+        dists = np.linalg.norm(objs_pos - target_pos, axis=1)
+        closest_obj_idx = np.argmin(dists)
+        self.place_entity = all_furnitures[closest_obj_idx]
+
+        # Get nodes from world graph for object to be moved and place receptacle
+        self.object_to_be_moved = env.world_graph[
+            self.agent_uid
+        ].get_node_from_sim_handle(self.grasp_mgr.snap_rigid_obj.handle)
+
+        # Set spatial relation
+        self.spatial_relation = "on"
 
         # Set flag to true
         self.target_is_set = True
