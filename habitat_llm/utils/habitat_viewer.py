@@ -20,7 +20,7 @@ import threading
 import time
 import tkinter as tk
 from multiprocessing import Event
-from queue import Full, Queue
+from queue import Empty, Full, Queue
 
 import magnum as mn
 import numpy as np
@@ -91,7 +91,7 @@ class HabitatViewer:
 
         # Threading communication
         self._gui_thread = None
-        self._gui_queue = Queue(maxsize=1)
+        self._gui_queue = Queue(maxsize=20)
         self._gui_ready = threading.Event()
 
     def _reset_camera(self) -> None:
@@ -310,7 +310,97 @@ class HabitatViewer:
 
         def update():
             """Update function called by Tkinter."""
-            try:
+            # Handle camera controls
+            self._handle_camera_zoom()
+            self._handle_camera_movement()
+
+            # Update camera transform
+            camera_transform = self._update_camera_transform()
+
+            # Set camera transform
+            rot = mn.Quaternion.from_matrix(camera_transform.rotation_scaling())
+            trans = self._camera_position
+            self._sim._sensors[
+                self._camera_name
+            ]._sensor_object.node.translation = trans
+            self._sim._sensors[self._camera_name]._sensor_object.node.rotation = rot
+            self._sim._sensors[
+                self._camera_name
+            ]._sensor_object.node.transformation = mn.Matrix4.from_(
+                rot.to_matrix(), trans
+            )
+
+            # Render observation
+            obs = self._sim.get_sensor_observations()
+            if self._camera_name in obs:
+                # Get the image data from observation
+                image_data = obs[self._camera_name]
+
+                # Display using Tkinter
+                self._display_observation_tkinter(image_data)
+
+            # Reset input deltas
+            self._mouse_delta = (0, 0)
+            self._mouse_scroll = 0.0
+
+            # Schedule next update
+            self._root.after(16, update)  # ~60 FPS
+
+        # Start update loop
+        update()
+
+        # Start Tkinter main loop
+        self._root.mainloop()
+
+    def start_thread(self):
+        """Start the viewer in a separate thread without blocking."""
+
+        def gui_thread():
+            """GUI thread function."""
+            # Create Tkinter window
+            self._root = tk.Tk()
+            self._root.title("Habitat-Sim Viewer")
+            self._root.geometry(f"{self._window_size[0]}x{self._window_size[1]}")
+
+            # Create canvas for image display
+            self._canvas = tk.Canvas(
+                self._root,
+                width=self._window_size[0],
+                height=self._window_size[1],
+                bg="black",
+            )
+            self._canvas.pack(fill=tk.BOTH, expand=True)
+
+            # Bind events
+            self._canvas.bind("<Motion>", self._mouse_callback)
+            self._canvas.bind("<Button-1>", self._mouse_callback)
+            self._canvas.bind("<ButtonRelease-1>", self._mouse_callback)
+
+            # Mouse wheel bindings for different platforms
+            self._canvas.bind("<MouseWheel>", self._mouse_callback)  # Windows
+            self._canvas.bind("<Button-4>", self._mouse_callback)  # Linux scroll up
+            self._canvas.bind("<Button-5>", self._mouse_callback)  # Linux scroll down
+            self._root.bind(
+                "<MouseWheel>", self._mouse_callback
+            )  # Windows (root level)
+            self._root.bind(
+                "<Button-4>", self._mouse_callback
+            )  # Linux scroll up (root level)
+            self._root.bind(
+                "<Button-5>", self._mouse_callback
+            )  # Linux scroll down (root level)
+
+            self._root.bind("<KeyPress>", self._key_press)
+            self._root.bind("<KeyRelease>", self._key_release)
+
+            # Focus on canvas for keyboard input
+            self._canvas.focus_set()
+
+            # Signal that GUI is ready
+            self._gui_ready.set()
+
+            def update():
+                """Update function called by Tkinter."""
                 # Handle camera controls
                 self._handle_camera_zoom()
                 self._handle_camera_movement()
@@ -331,14 +421,12 @@ class HabitatViewer:
                     rot.to_matrix(), trans
                 )
 
-                # Render observation
-                obs = self._sim.get_sensor_observations()
-                if self._camera_name in obs:
-                    # Get the image data from observation
-                    image_data = obs[self._camera_name]
-
-                    # Display using Tkinter
+                # Get image from main thread
+                try:
+                    image_data = self._gui_queue.get_nowait()
                     self._display_observation_tkinter(image_data)
+                except Empty:
+                    pass
 
                 # Reset input deltas
                 self._mouse_delta = (0, 0)
@@ -347,125 +435,11 @@ class HabitatViewer:
                 # Schedule next update
                 self._root.after(16, update)  # ~60 FPS
 
-            except Exception as e:
-                print(f"Update error: {e}")
-                self._root.quit()
+            # Start update loop
+            update()
 
-        # Start update loop
-        update()
-
-        # Start Tkinter main loop
-        try:
+            # Start Tkinter main loop
             self._root.mainloop()
-        except KeyboardInterrupt:
-            print("\nReceived interrupt signal")
-        finally:
-            if self._root:
-                self._root.destroy()
-
-    def start_thread(self):
-        """Start the viewer in a separate thread without blocking."""
-
-        def gui_thread():
-            """GUI thread function."""
-            try:
-                # Create Tkinter window
-                self._root = tk.Tk()
-                self._root.title("Habitat-Sim Viewer")
-                self._root.geometry(f"{self._window_size[0]}x{self._window_size[1]}")
-
-                # Create canvas for image display
-                self._canvas = tk.Canvas(
-                    self._root,
-                    width=self._window_size[0],
-                    height=self._window_size[1],
-                    bg="black",
-                )
-                self._canvas.pack(fill=tk.BOTH, expand=True)
-
-                # Bind events
-                self._canvas.bind("<Motion>", self._mouse_callback)
-                self._canvas.bind("<Button-1>", self._mouse_callback)
-                self._canvas.bind("<ButtonRelease-1>", self._mouse_callback)
-
-                # Mouse wheel bindings for different platforms
-                self._canvas.bind("<MouseWheel>", self._mouse_callback)  # Windows
-                self._canvas.bind("<Button-4>", self._mouse_callback)  # Linux scroll up
-                self._canvas.bind(
-                    "<Button-5>", self._mouse_callback
-                )  # Linux scroll down
-                self._root.bind(
-                    "<MouseWheel>", self._mouse_callback
-                )  # Windows (root level)
-                self._root.bind(
-                    "<Button-4>", self._mouse_callback
-                )  # Linux scroll up (root level)
-                self._root.bind(
-                    "<Button-5>", self._mouse_callback
-                )  # Linux scroll down (root level)
-
-                self._root.bind("<KeyPress>", self._key_press)
-                self._root.bind("<KeyRelease>", self._key_release)
-
-                # Focus on canvas for keyboard input
-                self._canvas.focus_set()
-
-                # Signal that GUI is ready
-                self._gui_ready.set()
-
-                def update():
-                    """Update function called by Tkinter."""
-                    try:
-                        # Handle camera controls
-                        self._handle_camera_zoom()
-                        self._handle_camera_movement()
-
-                        # Update camera transform
-                        camera_transform = self._update_camera_transform()
-
-                        # Set camera transform
-                        rot = mn.Quaternion.from_matrix(
-                            camera_transform.rotation_scaling()
-                        )
-                        trans = self._camera_position
-                        self._sim._sensors[
-                            self._camera_name
-                        ]._sensor_object.node.translation = trans
-                        self._sim._sensors[
-                            self._camera_name
-                        ]._sensor_object.node.rotation = rot
-                        self._sim._sensors[
-                            self._camera_name
-                        ]._sensor_object.node.transformation = mn.Matrix4.from_(
-                            rot.to_matrix(), trans
-                        )
-
-                        # Get image from main thread
-                        image_data = self._gui_queue.get_nowait()
-                        self._display_observation_tkinter(image_data)
-
-                        # Reset input deltas
-                        self._mouse_delta = (0, 0)
-                        self._mouse_scroll = 0.0
-
-                        # Schedule next update
-                        self._root.after(16, update)  # ~60 FPS
-
-                    except Exception as e:
-                        print(f"GUI update error: {e}")
-                        self._root.quit()
-
-                # Start update loop
-                update()
-
-                # Start Tkinter main loop
-                self._root.mainloop()
-
-            except Exception as e:
-                print(f"GUI thread error: {e}")
-            finally:
-                if self._root:
-                    self._root.destroy()
 
         # Start GUI thread
         self._gui_thread = threading.Thread(target=gui_thread, name="HabitatViewerGUI")
@@ -522,43 +496,29 @@ def run_viewer(config):
     env_interface = None
     sim = None
 
-    try:
-        # Create dataset
-        dataset = CollaborationDatasetV0(config.habitat.dataset)
+    # Create dataset
+    dataset = CollaborationDatasetV0(config.habitat.dataset)
 
-        # Register sensors, actions, and measures
-        register_sensors(config)
-        register_actions(config)
-        register_measures(config)
+    # Register sensors, actions, and measures
+    register_sensors(config)
+    register_actions(config)
+    register_measures(config)
 
-        # Initialize environment interface
-        env_interface = EnvironmentInterface(config, dataset=dataset, init_wg=False)
+    # Initialize environment interface
+    env_interface = EnvironmentInterface(config, dataset=dataset, init_wg=False)
 
-        # Get the simulator from the environment interface
-        sim = env_interface.env.env.env._env.sim
+    # Get the simulator from the environment interface
+    sim = env_interface.env.env.env._env.sim
 
-        # Create viewer with simulator
-        app = HabitatViewer(sim=sim, agent_idx=0, camera_name="gui_rgb")
-        app.run(non_blocking=False)
+    # Create viewer with simulator
+    app = HabitatViewer(sim=sim, agent_idx=0, camera_name="gui_rgb")
+    app.run(non_blocking=False)
 
-        while True:
-            time.sleep(1.0 / 30.0)
-            print("Checking if viewer is running")
-            obs = sim.get_sensor_observations()
-            app.update_image(obs["gui_rgb"])
-
-    except Exception as e:
-        print(f"Error running habitat viewer: {e}")
-        return 1
-    finally:
-        # Clean up environment interface
-        if env_interface:
-            try:
-                env_interface.env.close()
-                del env_interface
-            except Exception as e:
-                print(f"Warning: Error cleaning up environment interface: {e}")
-    return 0
+    while True:
+        time.sleep(1.0 / 30.0)
+        print("Checking if viewer is running")
+        obs = sim.get_sensor_observations()
+        app.update_image(obs["gui_rgb"])
 
 
 if __name__ == "__main__":

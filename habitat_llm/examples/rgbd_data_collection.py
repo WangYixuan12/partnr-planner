@@ -20,6 +20,8 @@ import sys
 import time
 
 import numpy as np
+import torch
+from omegaconf import OmegaConf
 
 # Add habitat-lab to path for imports
 sys.path.insert(
@@ -130,6 +132,7 @@ if __name__ == "__main__":
         sys.exit(1)
 
     # Run controller with Hydra config
+    OmegaConf.register_new_resolver("torch", lambda x: getattr(torch, x))
     data_collection()
 
     cprint(

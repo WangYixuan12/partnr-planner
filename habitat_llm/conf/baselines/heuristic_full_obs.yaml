@@ -2,6 +2,8 @@
 
 defaults:
   - /examples/centralized_full_obs
+  - /memory: scene_mem
+  - /dataset: my_dataset
   - override /planner@evaluation.planner: dag_centralized_planner
 
 habitat:

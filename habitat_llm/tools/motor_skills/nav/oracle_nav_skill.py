@@ -14,6 +14,7 @@ from habitat.datasets.rearrange.navmesh_utils import (
     SimpleVelocityControlEnv,
     compute_turn,
     embodied_unoccluded_navmesh_snap,
+    embodied_unoccluded_navmesh_snap_loose,
 )
 from habitat.sims.habitat_simulator.sim_utilities import (
     get_global_keypoints_from_object_id,
@@ -178,7 +179,7 @@ class OracleNavSkill(SkillPolicy):
             )
         return agent_object_ids, other_agent_object_ids
 
-    def set_target(self, target_name: str, env):
+    def set_target_by_name(self, target_name: str, env):
         """
         Identify the target Entity (Receptacle, Object, Furniture) for the navigation skill and generate a target pose for the agent to reach the Entity.
 
@@ -231,7 +232,7 @@ class OracleNavSkill(SkillPolicy):
                     self.target_base_pos,
                     self.target_base_rot,
                     success,
-                ) = embodied_unoccluded_navmesh_snap(
+                ) = embodied_unoccluded_navmesh_snap_loose(
                     target_position=mn.Vector3(self.target_pos),
                     height=1.3,  # TODO: hardcoded everywhere, should be config
                     sim=self.env.sim,
@@ -382,6 +383,53 @@ class OracleNavSkill(SkillPolicy):
             return
         # if we're here, we failed to find a placement
         self.termination_message = f"Could not find a suitable nav target for {target_name}. Possibly inaccessible."
+        self.failed = True
+
+    def set_target(self, target_pos: mn.Vector3, env):
+        self.target_pos = target_pos
+
+        # look for interaction points to use if center sample fails
+        global_points = [self.target_pos]
+
+        # now try to snap close to the target position allowing impact with the furniture as non-occlusion
+        attempts = 0
+        # NOTE: Alex set a threshold here empirically (obj_to_nav_point_dist > 1.8) based on expected ee dist for open/close/pick/place/etc... Should be re-evaluated.
+        max_fur_to_nav_point_dist = 1.8
+        # TODO: decide how to parameterize this distance or set from config
+        fur_to_nav_point_dist = 0
+        success = False
+        while (
+            not success or fur_to_nav_point_dist > max_fur_to_nav_point_dist
+        ) and attempts < 200:
+            target_position = self.target_pos
+            if attempts < len(global_points):
+                target_position = global_points[attempts]
+            (
+                self.target_base_pos,
+                self.target_base_rot,
+                success,
+            ) = embodied_unoccluded_navmesh_snap_loose(
+                target_position=mn.Vector3(target_position),
+                height=1.3,  # TODO: hardcoded everywhere, should be config
+                sim=self.env.sim,
+                target_object_ids=None,
+                ignore_object_ids=None,
+                ignore_object_collision_ids=None,  # ignore the other agent's body in contact testing
+                island_id=self.env.sim._largest_indoor_island_idx,  # from RearrangeSim
+                min_sample_dist=0.25,  # approximates agent radius, doesn't need to be precise
+                agent_embodiment=self.articulated_agent,
+                orientation_noise=0.1,  # allow a bit of variation in body orientation
+            )
+            if success:
+                fur_to_nav_point_dist = (
+                    mn.Vector3(self.target_base_pos) - mn.Vector3(target_position)
+                ).length()
+            attempts += 1
+        if success and fur_to_nav_point_dist <= max_fur_to_nav_point_dist:
+            self.env.sim.dynamic_target = self.target_base_pos
+            return
+        # if we're here, we failed to find a placement
+        self.termination_message = f"Could not find a suitable nav target for {target_pos}. Possibly inaccessible."
         self.failed = True
 
     def rotation_collision_check(

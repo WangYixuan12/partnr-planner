@@ -1,0 +1,11 @@
+_target_: conceptgraph.dataset.datasets_common.get_dataset
+dataconfig: /home/yixuan/concept-graphs/conceptgraph/dataset/dataconfigs/replica/replica.yaml
+basedir: /home/yixuan/concept-graphs/data/Replica
+sequence: room0
+start: 0
+end: -1
+stride: 5
+desired_height: 680
+desired_width: 1200
+device: cuda
+dtype: ${torch:float}

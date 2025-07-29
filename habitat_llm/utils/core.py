@@ -76,7 +76,8 @@ def fix_config(cfg, root: bool = True) -> None:
         if type(cfg[k]) is DictConfig:
             fix_config(cfg[k], False)
         else:
-            setattr(cfg, k, getattr(cfg, k))
+            if not isinstance(getattr(cfg, k), torch.dtype):
+                setattr(cfg, k, getattr(cfg, k))
 
 
 def setup_config(config: DictConfig = None, seed: int = 47668090) -> DictConfig:

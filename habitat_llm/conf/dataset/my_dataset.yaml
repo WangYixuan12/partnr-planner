@@ -1,0 +1,7 @@
+basedir: /home/yixuan/partnr-planner/data/my_data
+sequence: episode_17
+start: 0
+end: -1
+stride: 5
+device: cuda
+dtype: ${torch:float}

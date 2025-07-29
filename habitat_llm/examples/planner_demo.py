@@ -13,6 +13,7 @@ import traceback
 import json
 import shutil
 from omegaconf import OmegaConf
+import torch
 
 
 # append the path of the
@@ -137,6 +138,7 @@ def run_eval(config):
     # Setup config
     config = setup_config(config, seed)
     dataset = CollaborationDatasetV0(config.habitat.dataset)
+    dataset.episodes = dataset.episodes[17:18]
 
     write_config(config)
     if config.get("resume", False):
@@ -451,6 +453,7 @@ if __name__ == "__main__":
         sys.exit(1)
 
     # Run planner
+    OmegaConf.register_new_resolver("torch", lambda x: getattr(torch, x))
     run_eval()
 
     cprint(

@@ -26,7 +26,6 @@ from habitat_llm.agent.env import EnvironmentInterface
 from habitat_llm.examples.example_utils import DebugVideoUtil
 from habitat_llm.planner.planner import Planner
 from habitat_llm.utils import cprint, rollout_print
-from habitat_llm.utils.robot_controller import RobotController
 from habitat_llm.utils.sim import init_agents
 from habitat_llm.world_model import Entity, WorldGraph
 
@@ -131,11 +130,11 @@ class EvaluationRunner:
         self._world_graph_write_out_frequency = 5
 
         # self.habitat_viewer = HabitatViewer(sim=self.env_interface.env.env.env._env.sim, agent_idx=0, camera_name="gui_rgb")
-        self.robot_controller = RobotController(
-            env_interface=self.env_interface,
-            agent_idx=0,
-            camera_names=["head_rgb", "third_rgb"],
-        )
+        # self.robot_controller = RobotController(
+        #     env_interface=self.env_interface,
+        #     agent_idx=0,
+        #     camera_names=["head_rgb", "third_rgb"],
+        # )
         # self.habitat_viewer.run(non_blocking=True)
 
     def _initialize_planners(self):
@@ -603,7 +602,7 @@ class EvaluationRunner:
         low_level_actions: List[Dict[str, Any]] = []
         should_end = False
 
-        self.robot_controller.run()
+        # self.robot_controller.run()
         # self.habitat_viewer.run(non_blocking=False)
         # Plan until required
         while not should_end:
