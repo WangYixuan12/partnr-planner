@@ -30,7 +30,6 @@ sys.path.insert(
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../"))
 
 import hydra
-from yixuan_utilities.hdf5_utils import save_dict_to_hdf5
 
 from habitat_llm.agent.env import (
     EnvironmentInterface,
@@ -40,7 +39,7 @@ from habitat_llm.agent.env import (
 )
 from habitat_llm.agent.env.dataset import CollaborationDatasetV0
 from habitat_llm.utils import cprint, fix_config, setup_config
-from habitat_llm.utils.robot_controller import RobotController
+from habitat_llm.utils.habitat_viewer import HabitatViewer
 
 
 # Method to load agent planner from the config
@@ -70,10 +69,29 @@ def data_collection(config):
     env_interface = EnvironmentInterface(config, dataset=dataset, init_wg=False)
 
     # Create controller with simulator
-    controller = RobotController(
-        env_interface=env_interface, agent_idx=0, camera_names=["third_rgb", "head_rgb"]
-    )
-    obs_hist = controller.run(save_views=["head_rgb", "head_depth"])
+    for i in range(2):
+        if i == 1:
+            [
+                obj[0]
+                for obj in env_interface.env.env.env._env.current_episode.rigid_objs
+            ]
+            offset_dist = np.array([-0.3, 0.0, 0.0])
+            env_interface.env.env.env._env.current_episode.rigid_objs[1][1][0][
+                3
+            ] += offset_dist[0]
+            env_interface.env.env.env._env.current_episode.rigid_objs[1][1][1][
+                3
+            ] += offset_dist[1]
+            env_interface.env.env.env._env.current_episode.rigid_objs[1][1][2][
+                3
+            ] += offset_dist[2]
+            env_interface.env.reset()
+        # controller = RobotController(
+        #     env_interface=env_interface, agent_idx=0, camera_names=["third_rgb", "head_rgb"]
+        # )
+        # obs_hist = controller.run(save_views=["head_rgb", "head_depth"])
+        viewer = HabitatViewer(env_interface.sim)
+        viewer.run(non_blocking=False)
     # for i in range(len(obs_hist["head_rgb"])):
     #     head_rgb = obs_hist["head_rgb"][i]
     #     head_depth = obs_hist["head_depth"][i]
@@ -85,38 +103,38 @@ def data_collection(config):
     #     concat_img = cv2.cvtColor(concat_img, cv2.COLOR_RGB2BGR)
     #     cv2.imshow("concat_img", concat_img)
     #     cv2.waitKey(30)
-    for k in obs_hist:
-        obs_hist[k] = np.stack(obs_hist[k], axis=0)
-    config_dict = {
-        "head_rgb": {
-            "dtype": "uint8",
-            "chunks": (
-                1,
-                obs_hist["head_rgb"].shape[1],
-                obs_hist["head_rgb"].shape[2],
-                3,
-            ),
-        },
-        "head_depth": {
-            "dtype": "float32",
-            "chunks": (
-                1,
-                obs_hist["head_depth"].shape[1],
-                obs_hist["head_depth"].shape[2],
-                1,
-            ),
-        },
-        "head_rgb_extrinsic": {
-            "dtype": "float32",
-            "chunks": (1, 4, 4),
-        },
-        "head_rgb_intrinsic": {
-            "dtype": "float32",
-            "chunks": (1, 3, 3),
-        },
-    }
-    os.system("mkdir -p data/my_data")
-    save_dict_to_hdf5(obs_hist, config_dict, f"data/my_data/episode_{episode_id}.hdf5")
+    # for k in obs_hist:
+    #     obs_hist[k] = np.stack(obs_hist[k], axis=0)
+    # config_dict = {
+    #     "head_rgb": {
+    #         "dtype": "uint8",
+    #         "chunks": (
+    #             1,
+    #             obs_hist["head_rgb"].shape[1],
+    #             obs_hist["head_rgb"].shape[2],
+    #             3,
+    #         ),
+    #     },
+    #     "head_depth": {
+    #         "dtype": "float32",
+    #         "chunks": (
+    #             1,
+    #             obs_hist["head_depth"].shape[1],
+    #             obs_hist["head_depth"].shape[2],
+    #             1,
+    #         ),
+    #     },
+    #     "head_rgb_extrinsic": {
+    #         "dtype": "float32",
+    #         "chunks": (1, 4, 4),
+    #     },
+    #     "head_rgb_intrinsic": {
+    #         "dtype": "float32",
+    #         "chunks": (1, 3, 3),
+    #     },
+    # }
+    # os.system("mkdir -p data/my_data")
+    # save_dict_to_hdf5(obs_hist, config_dict, f"data/my_data/episode_{episode_id}.hdf5")
 
     return 0
 
